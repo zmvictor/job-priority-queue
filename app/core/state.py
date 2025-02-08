@@ -80,23 +80,33 @@ class JobStateManager:
         if not os.path.exists(self._state_file):
             return
             
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
             with open(self._state_file, 'r') as f:
-                state = json.load(f)
+                state = json.load(f, object_hook=lambda d: {k: v for k, v in d.items()})
                 
             for job_data in state.get("running_jobs", {}).values():
-                job = Job(
-                    id=job_data["id"],
-                    name=job_data["name"],
-                    priority=job_data["priority"],
-                    submitted_at=datetime.fromisoformat(job_data["submitted_at"]),
-                    status=JobStatus(job_data["status"]),
-                    metadata=job_data["metadata"],
-                    last_status_change=datetime.fromisoformat(job_data["last_status_change"]),
-                    preemption_count=job_data["preemption_count"],
-                    wait_time_weight=job_data["wait_time_weight"]
-                )
-                self._running_jobs[job.id] = job
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            # Log error but continue with empty state
-            print(f"Error loading state: {e}")
+                try:
+                    job = Job(
+                        id=job_data["id"],
+                        name=job_data["name"],
+                        priority=job_data["priority"],
+                        submitted_at=datetime.fromisoformat(job_data["submitted_at"]),
+                        status=JobStatus(job_data["status"]),
+                        metadata=job_data["metadata"],
+                        last_status_change=datetime.fromisoformat(job_data["last_status_change"]),
+                        preemption_count=job_data["preemption_count"],
+                        wait_time_weight=job_data["wait_time_weight"]
+                    )
+                    self._running_jobs[job.id] = job
+                except (KeyError, ValueError) as e:
+                    logger.error(f"Error loading job data: {e}")
+                    continue
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding state file: {e}")
+        except FileNotFoundError as e:
+            logger.warning(f"State file not found: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error loading state: {e}")
