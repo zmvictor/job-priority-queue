@@ -14,7 +14,7 @@ class PriorityQueue:
         """Thread-safe enqueue operation."""
         with self._lock:
             effective_priority = self._calculate_priority(job)
-            heapq.heappush(self._queue, (-effective_priority, job.id))
+            heapq.heappush(self._queue, (effective_priority, job.id))
             self._job_map[job.id] = job
             
     def dequeue(self) -> Optional[Job]:
@@ -57,21 +57,23 @@ class PriorityQueue:
                 return False
             job = self._job_map[job_id]
             effective_priority = self._calculate_priority(job)
-            heapq.heappush(self._queue, (-effective_priority, job_id))
+            heapq.heappush(self._queue, (effective_priority, job_id))
             return True
     
-    def _calculate_priority(self, job: Job) -> float:
+    def _calculate_priority(self, job: Job) -> tuple:
         """Calculate effective priority including wait time factor.
         
-        Priority is calculated as: base_priority * 100 + wait_time_boost
-        This ensures base priority always takes precedence over wait time.
+        Priority is calculated as a tuple: (-priority, -wait_time_hours, submission_time)
+        All elements are ordered for proper priority queue behavior.
         """
-        base_priority = job.priority * 100  # Scale up to make room for wait time boost
-        wait_time = datetime.now(UTC) - job.submitted_at
-        # Cap wait factor at 24 hours (max 99 point boost)
-        wait_factor = min(wait_time.total_seconds() / 3600, 24)
-        wait_boost = wait_factor * job.wait_time_weight
-        return base_priority + wait_boost
+        job.update_wait_time_weight()  # Update the weight based on current wait time
+        
+        # For jobs with same priority, prioritize wait time weight
+        return (
+            -job.priority,  # Base priority first
+            -job.wait_time_weight,  # Wait time weight second (higher = more negative)
+            job.submitted_at.timestamp()  # Finally by submission time
+        )
     
     @property
     def size(self) -> int:

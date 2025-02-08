@@ -45,7 +45,9 @@ class TestPriorityQueue:
         # Verify the priority calculation
         old_priority = queue._calculate_priority(old_job)
         recent_priority = queue._calculate_priority(recent_job)
-        assert old_priority > recent_priority
+        # For same priority, compare wait times (second tuple element)
+        assert old_priority[0] == recent_priority[0]  # Same base priority
+        assert old_priority[1] < recent_priority[1]  # Older job has more negative wait time
 
     def test_thread_safety(self):
         import threading
@@ -73,13 +75,16 @@ class TestPriorityQueue:
         assert queue.size == len(jobs)
         
         # Verify dequeue order maintains priority
-        prev_priority = float('inf')
+        prev_priority = None
         while True:
             job = queue.dequeue()
             if not job:
                 break
             effective_priority = queue._calculate_priority(job)
-            assert effective_priority <= prev_priority
+            if prev_priority is not None:
+                # For tuples, the comparison should work naturally
+                # (-priority, -wait_time) means higher priority and longer wait come first
+                assert effective_priority >= prev_priority
             prev_priority = effective_priority
 
     def test_remove_job(self):
@@ -112,7 +117,9 @@ class TestPriorityQueue:
         # Get job and verify priority increased
         updated_job = queue.get_job(job.id)
         updated_priority = queue._calculate_priority(updated_job)
-        assert updated_priority > initial_priority
+        # Same base priority but more negative wait time
+        assert updated_priority[0] == initial_priority[0]  # Same base priority
+        assert updated_priority[1] < initial_priority[1]  # More negative wait time after update
 
     def test_peek_without_removal(self):
         queue = PriorityQueue()

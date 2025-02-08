@@ -3,7 +3,7 @@ from typing import Dict, Optional, List
 from datetime import datetime
 import json
 import os
-from app.models.job import Job, JobStatus
+from app.models.job import Job, JobStatus, JobJSONEncoder
 
 class JobStateManager:
     def __init__(self, state_file: str = "job_state.json"):
@@ -72,7 +72,7 @@ class JobStateManager:
         # Write to temporary file first to ensure atomic update
         temp_file = f"{self._state_file}.tmp"
         with open(temp_file, 'w') as f:
-            json.dump(state, f)
+            json.dump(state, f, cls=JobJSONEncoder)
         os.rename(temp_file, self._state_file)
     
     def _load_state(self) -> None:

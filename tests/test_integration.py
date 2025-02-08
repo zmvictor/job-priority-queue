@@ -20,6 +20,10 @@ async def client():
 @pytest.fixture(autouse=True)
 async def setup_and_cleanup():
     """Setup test environment and cleanup after."""
+    # Initialize database
+    from app.models.database import init_db
+    await init_db()
+    
     # Start HA manager
     await queue_manager.start()
     # Force leader status for tests
@@ -161,17 +165,32 @@ class TestJobLifecycle:
             job = await queue_manager.get_job(job_id)
             # Age jobs differently and ensure timezone awareness
             job.submitted_at = (job.submitted_at - timedelta(hours=i * 12)).replace(tzinfo=UTC)  # 0h, 12h, 24h old
+            job.last_status_change = job.submitted_at  # Update last_status_change to match
+            job.update_wait_time_weight()  # Update weight based on new submitted_at
             jobs.append(job)
             
-            # Update job in database
+            # Update job in database with correct timezone and wait time
             async with get_session() as session:
                 stmt = (
                     update(JobModel)
                     .where(JobModel.id == job.id)
-                    .values(submitted_at=job.submitted_at)
+                    .values(
+                        submitted_at=job.submitted_at.astimezone(UTC),
+                        last_status_change=job.last_status_change,
+                        wait_time_weight=job.wait_time_weight
+                    )
                 )
                 await session.execute(stmt)
                 await session.commit()
+                
+                # Verify the update
+                result = await session.execute(
+                    select(JobModel).where(JobModel.id == job.id)
+                )
+                db_job = result.scalar_one()
+                assert db_job.submitted_at.tzinfo == UTC
+                assert db_job.wait_time_weight == job.wait_time_weight
+                assert db_job.wait_time_weight > 1.0  # Ensure weight is boosted for aged jobs
         
         # Update priorities
         await client.post("/api/v1/jobs/update-priorities")

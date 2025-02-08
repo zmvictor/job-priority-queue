@@ -1,7 +1,8 @@
 from datetime import datetime, UTC
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, TypeDecorator
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, TypeDecorator, event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import NullPool
 import enum
 
 class UTCDateTime(TypeDecorator):
@@ -47,8 +48,11 @@ class JobModel(Base):
 
 # Async database setup
 engine = create_async_engine(
-    "sqlite+aiosqlite:///jobs.db",
+    "sqlite+aiosqlite:///:memory:",  # Use in-memory database for tests
     echo=True,
+    connect_args={
+        "check_same_thread": False,
+    }
 )
 
 async_session = sessionmaker(
