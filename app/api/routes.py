@@ -11,6 +11,9 @@ __all__ = ['router']
 
 router = APIRouter()
 
+from app.models.database import init_db
+init_db()
+
 @router.post("/jobs", response_model=Job)
 async def submit_job(job: JobCreate):
     """Submit a new job to the priority queue."""
