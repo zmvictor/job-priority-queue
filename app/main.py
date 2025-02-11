@@ -2,20 +2,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
 from app.core.queue_manager import queue_manager
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Job Priority Queue", version="1.0.0")
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup code
     from app.models.database import init_db
     await init_db()
     await queue_manager.start()
 
+    # Yield control back to FastAPI (app will run after this)
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
+    # Shutdown code (runs after the application stops)
     await queue_manager.clear()
     await queue_manager.stop()
+
+app = FastAPI(title="Job Priority Queue", version="1.0.0", lifespan=lifespan)
 
 # CORS middleware configuration
 app.add_middleware(
