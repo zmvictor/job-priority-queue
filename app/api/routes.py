@@ -11,6 +11,9 @@ __all__ = ['router']
 
 router = APIRouter()
 
+from app.models.database import init_db
+init_db()
+
 @router.post("/jobs", response_model=Job)
 async def submit_job(job: JobCreate):
     """Submit a new job to the priority queue."""
@@ -43,28 +46,21 @@ async def preempt_job(job_id: str):
                 detail=f"Job {job_id} is not in RUNNING state (current status: {job.status})"
             )
         
-        # Preempt job in a new session
-        async with get_session() as session:
-            try:
-                async with session.begin():
-                    logger.info(f"Attempting to preempt job {job_id}")
-                    preempted_job = await queue_manager.preempt_job(job, session)
-                    logger.info(f"Successfully preempted job {job_id}")
-                    return preempted_job
-            except ValueError as e:
-                logger.error(f"Failed to preempt job {job_id}: {str(e)}")
-                raise HTTPException(status_code=400, detail=str(e))
-            except Exception as e:
-                logger.error(f"Unexpected error while preempting job {job_id}: {str(e)}")
-                raise HTTPException(status_code=500, detail=str(e))
+        # Preempt job
+        logger.info(f"Attempting to preempt job {job_id}")
+        preempted_job = await queue_manager.preempt_job(job_id)
+        logger.info(f"Successfully preempted job {job_id}")
+        return preempted_job
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.error(f"Failed to preempt job {job_id}: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
         error_detail = f"{str(e)}\n{traceback.format_exc()}"
         logger.error(f"Unexpected error while preempting job {job_id}: {error_detail}")
         logger.error(f"Job state: {job.__dict__ if job else 'None'}")
-        logger.error(f"Failed to preempt job {job_id}")
         raise HTTPException(status_code=500, detail=error_detail)
 
 @router.get("/jobs", response_model=List[Job])

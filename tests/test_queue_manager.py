@@ -1,15 +1,22 @@
 import pytest
 from datetime import datetime, timedelta, UTC
+from sqlalchemy import update
 from app.models.job import JobCreate, JobStatus
 from app.core.queue_manager import QueueManager
+from app.models.database import get_session, JobModel
 
 class TestQueueManager:
     @pytest.fixture
     async def manager(self):
+        # Initialize database
+        from app.models.database import init_db
+        await init_db()
+        
         manager = QueueManager()
         await manager.start()
         # Force leader status for tests
         manager.state_manager.ha_manager.is_leader = True
+        manager.state_manager.ha_manager.node_id = "test-leader-node"
         yield manager
         # Cleanup after each test
         await manager.clear()
@@ -37,6 +44,16 @@ class TestQueueManager:
         
         # Artificially age job1
         job1.submitted_at -= timedelta(hours=12)
+        
+        # Update job in database
+        async with get_session() as session:
+            stmt = (
+                update(JobModel)
+                .where(JobModel.id == job1.id)
+                .values(submitted_at=job1.submitted_at)
+            )
+            await session.execute(stmt)
+            await session.commit()
         
         # Update priorities
         await manager.update_priorities()
@@ -96,6 +113,17 @@ class TestQueueManager:
         jobs[0].submitted_at = jobs[0].submitted_at - timedelta(hours=24)  # Very old
         jobs[1].submitted_at = jobs[1].submitted_at - timedelta(hours=12)  # Moderately old
         # jobs[2] stays recent
+        
+        # Update jobs in database
+        async with get_session() as session:
+            for job in jobs[:2]:  # Only update aged jobs
+                stmt = (
+                    update(JobModel)
+                    .where(JobModel.id == job.id)
+                    .values(submitted_at=job.submitted_at)
+                )
+                await session.execute(stmt)
+            await session.commit()
         
         # Update priorities
         await manager.update_priorities()

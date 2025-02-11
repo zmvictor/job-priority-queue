@@ -23,14 +23,18 @@ class TestJobStateManager:
         return str(tmp_path / "test_state.json")
     
     @pytest.fixture
-    def state_manager(self, state_file):
+    async def state_manager(self, state_file):
+        # Initialize database
+        from app.models.database import init_db
+        await init_db()
+        
         manager = JobStateManager(state_file=state_file)
         yield manager
         # Cleanup
         if os.path.exists(state_file):
             os.remove(state_file)
     
-    def test_state_transitions(self, state_manager):
+    async def test_state_transitions(self, state_manager):
         job = create_test_job()
         
         # Test transition to running
@@ -50,7 +54,7 @@ class TestJobStateManager:
         assert job.status == JobStatus.COMPLETED
         assert state_manager.get_job_state(job.id) is None
     
-    def test_high_availability_persistence(self, state_manager, state_file):
+    async def test_high_availability_persistence(self, state_manager, state_file):
         job = create_test_job()
         state_manager.transition_to_running(job)
         
@@ -67,7 +71,7 @@ class TestJobStateManager:
         assert loaded_job.id == job.id
         assert loaded_job.status == JobStatus.RUNNING
     
-    def test_concurrent_running_jobs(self, state_manager):
+    async def test_concurrent_running_jobs(self, state_manager):
         jobs = [create_test_job(f"job-{i}") for i in range(3)]
         for job in jobs:
             state_manager.transition_to_running(job)
@@ -76,7 +80,7 @@ class TestJobStateManager:
         assert len(running_jobs) == 3
         assert all(job.status == JobStatus.RUNNING for job in running_jobs)
     
-    def test_preemption_tracking(self, state_manager):
+    async def test_preemption_tracking(self, state_manager):
         job = create_test_job()
         
         # Multiple preemptions
@@ -88,7 +92,7 @@ class TestJobStateManager:
         state_manager.preempt_job(job)
         assert job.preemption_count == 2
     
-    def test_state_recovery_after_corruption(self, state_manager, state_file):
+    async def test_state_recovery_after_corruption(self, state_manager, state_file):
         # Write invalid JSON
         with open(state_file, 'w') as f:
             f.write("invalid json")
@@ -97,7 +101,7 @@ class TestJobStateManager:
         new_manager = JobStateManager(state_file=state_file)
         assert len(new_manager.get_running_jobs()) == 0
     
-    def test_atomic_state_updates(self, state_manager, state_file):
+    async def test_atomic_state_updates(self, state_manager, state_file):
         job = create_test_job()
         state_manager.transition_to_running(job)
         

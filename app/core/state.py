@@ -3,7 +3,7 @@ from typing import Dict, Optional, List
 from datetime import datetime
 import json
 import os
-from app.models.job import Job, JobStatus
+from app.models.job import Job, JobStatus, JobJSONEncoder
 
 class JobStateManager:
     def __init__(self, state_file: str = "job_state.json"):
@@ -72,7 +72,7 @@ class JobStateManager:
         # Write to temporary file first to ensure atomic update
         temp_file = f"{self._state_file}.tmp"
         with open(temp_file, 'w') as f:
-            json.dump(state, f)
+            json.dump(state, f, cls=JobJSONEncoder)
         os.rename(temp_file, self._state_file)
     
     def _load_state(self) -> None:
@@ -80,23 +80,33 @@ class JobStateManager:
         if not os.path.exists(self._state_file):
             return
             
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
             with open(self._state_file, 'r') as f:
-                state = json.load(f)
+                state = json.load(f, object_hook=lambda d: {k: v for k, v in d.items()})
                 
             for job_data in state.get("running_jobs", {}).values():
-                job = Job(
-                    id=job_data["id"],
-                    name=job_data["name"],
-                    priority=job_data["priority"],
-                    submitted_at=datetime.fromisoformat(job_data["submitted_at"]),
-                    status=JobStatus(job_data["status"]),
-                    metadata=job_data["metadata"],
-                    last_status_change=datetime.fromisoformat(job_data["last_status_change"]),
-                    preemption_count=job_data["preemption_count"],
-                    wait_time_weight=job_data["wait_time_weight"]
-                )
-                self._running_jobs[job.id] = job
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            # Log error but continue with empty state
-            print(f"Error loading state: {e}")
+                try:
+                    job = Job(
+                        id=job_data["id"],
+                        name=job_data["name"],
+                        priority=job_data["priority"],
+                        submitted_at=datetime.fromisoformat(job_data["submitted_at"]),
+                        status=JobStatus(job_data["status"]),
+                        metadata=job_data["metadata"],
+                        last_status_change=datetime.fromisoformat(job_data["last_status_change"]),
+                        preemption_count=job_data["preemption_count"],
+                        wait_time_weight=job_data["wait_time_weight"]
+                    )
+                    self._running_jobs[job.id] = job
+                except (KeyError, ValueError) as e:
+                    logger.error(f"Error loading job data: {e}")
+                    continue
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding state file: {e}")
+        except FileNotFoundError as e:
+            logger.warning(f"State file not found: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error loading state: {e}")
