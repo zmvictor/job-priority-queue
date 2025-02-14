@@ -87,13 +87,14 @@ class HAGlobalScheduler:
                         last_status_change=now,
                         job_metadata="{}"  # Ensure metadata is set
                     )
-                    .returning(JobModel)
+                    .returning(JobModel.leader_id)
                 )
                 result = await session.execute(stmt)
-                updated = result.scalar_one_or_none()
+                updated_leader_id = result.scalar_one_or_none()
                 
-                if updated:
+                if updated_leader_id == self.node_id:
                     await session.commit()
+                    self.is_leader = True
                     return True
                 
                 # If no leader record exists, create one
@@ -159,12 +160,17 @@ class HAGlobalScheduler:
     async def submit_job(self, job: JobCreate) -> Job:
         """Submit a job to the scheduler."""
         # Check leadership status
-        await self._try_acquire_leadership()  # Try to acquire leadership first
-        if not self.is_leader:
+        if not self.is_leader and not await self._try_acquire_leadership():
             raise ValueError("Not the leader node")
             
         # Create Job instance from JobCreate
         new_job = Job.create(job)
+        
+        # Add default cluster if not specified
+        if "cluster" not in new_job.metadata:
+            metadata = dict(new_job.metadata)
+            metadata["cluster"] = "default"
+            object.__setattr__(new_job, 'metadata', metadata)
             
         # Save job to database first
         async with get_session() as session:
