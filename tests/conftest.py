@@ -100,9 +100,10 @@ async def test_client():
     app.state.ha_scheduler = ha_scheduler
     
     # Create test client
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        yield client
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    yield client
     
     # Cleanup
+    await client.aclose()
     await ha_scheduler.stop()
     await queue_manager.stop()

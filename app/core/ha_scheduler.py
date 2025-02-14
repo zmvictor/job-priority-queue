@@ -142,12 +142,12 @@ class HAGlobalScheduler:
             # Update local state
             self.queue_manager.queue.clear()
             for job in jobs:
-                if job.status == JobStatus.PENDING:
+                if job.status == JobStatusEnum.SUBMITTED:
                     # Re-queue pending jobs
                     job_create = JobCreate(
                         name=job.name,
                         priority=job.priority,
-                        metadata=dict(job.metadata)
+                        metadata=json.loads(job.job_metadata)
                     )
                     new_job = Job.create(job_create)
                     # Update fields that should be preserved
