@@ -45,7 +45,8 @@ async def setup_database():
             await session.rollback()
             
         # Create tables if they don't exist
-        await session.execute("""
+        from sqlalchemy import text
+        await session.execute(text("""
             CREATE TABLE IF NOT EXISTS jobs (
                 id VARCHAR NOT NULL PRIMARY KEY,
                 name VARCHAR NOT NULL,
@@ -59,7 +60,7 @@ async def setup_database():
                 leader_id VARCHAR,
                 last_heartbeat DATETIME
             )
-        """)
+        """))
         await session.commit()
     
     yield
