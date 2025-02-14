@@ -89,56 +89,48 @@ class HAGlobalScheduler:
                 result = await session.execute(stmt)
                 leader = result.scalar_one_or_none()
                 
-                if leader and leader.leader_id == self.node_id:
-                    # We're already leader, update heartbeat
-                    leader.last_heartbeat = now
-                    await session.commit()
-                    return True
-                
-                # Try to acquire leadership
-                stmt = (
-                    update(JobModel)
-                    .where(
-                        JobModel.id == "leader",
-                        or_(
-                            JobModel.leader_id.is_(None),
-                            JobModel.last_heartbeat < lease_expired
-                        )
-                    )
-                    .values(
-                        leader_id=self.node_id,
-                        last_heartbeat=now,
-                        status=JobStatusEnum.SUBMITTED,
-                        last_status_change=now,
-                        job_metadata="{}"  # Ensure metadata is set
-                    )
-                    .returning(JobModel)
-                )
-                result = await session.execute(stmt)
-                updated = result.scalar_one_or_none()
-                
-                if updated and updated.leader_id == self.node_id:
-                    await session.commit()
-                    return True
+                if leader:
+                    if leader.leader_id == self.node_id:
+                        # We're already leader, update heartbeat
+                        leader.last_heartbeat = now
+                        await session.commit()
+                        self.is_leader = True
+                        return True
+                        
+                    # Try to take over if lease expired
+                    if leader.last_heartbeat < lease_expired:
+                        leader.leader_id = self.node_id
+                        leader.last_heartbeat = now
+                        await session.commit()
+                        self.is_leader = True
+                        return True
+                        
+                    return False
                     
-                # If no leader record exists, create one
-                if not leader:
+                # No leader record exists, create one
+                try:
                     leader = JobModel(
                         id="leader",
                         name="leader",
-                        priority=0,
-                        submitted_at=now,
                         status=JobStatusEnum.SUBMITTED,
+                        priority=0,
                         job_metadata="{}",
+                        submitted_at=now,
                         last_status_change=now,
-                        preemption_count=0,
-                        wait_time_weight=1.0,
                         leader_id=self.node_id,
-                        last_heartbeat=now
+                        last_heartbeat=now,
+                        preemption_count=0,
+                        wait_time_weight=1.0
                     )
                     session.add(leader)
                     await session.commit()
+                    self.is_leader = True
                     return True
+                except Exception:
+                    await session.rollback()
+                    # Another node might have created the leader record
+                    # Try again
+                    return await self._try_acquire_leadership()
                 result = await session.execute(stmt)
                 updated = result.scalar_one_or_none()
                 

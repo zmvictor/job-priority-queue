@@ -68,8 +68,11 @@ class GlobalMLScheduler:
         
         for job in sorted(jobs, key=lambda j: j.submitted_at):
             tenant = self._get_tenant(job)
+            if tenant not in tenant_resources:
+                tenant_resources[tenant] = {"gpu": 0.0, "cpu": 0.0, "total": 0.0}
+                
             if self._would_exceed_quota(tenant, job, tenant_resources):
-                job.priority = self.PRIORITY_LEVELS["LOWEST"]
+                object.__setattr__(job, 'priority', self.PRIORITY_LEVELS["LOWEST"])
             else:
                 resources = tenant_resources[tenant]
                 job_resources = self._get_job_resources(job)
@@ -185,7 +188,7 @@ class GlobalMLScheduler:
     def _get_tenant(self, job: Job) -> str:
         """Get tenant ID from job metadata."""
         # Handle nested metadata structure
-        metadata = job.get_metadata()  # Get a copy to handle immutable metadata
+        metadata = job.metadata
         if isinstance(metadata, dict):
             # First check top-level metadata
             if "tenant_id" in metadata:
@@ -193,7 +196,16 @@ class GlobalMLScheduler:
             # Then check nested metadata
             if "metadata" in metadata and isinstance(metadata["metadata"], dict):
                 if "tenant_id" in metadata["metadata"]:
-                    return metadata["metadata"]["tenant_id"]
+                    tenant_id = metadata["metadata"]["tenant_id"]
+                    # Move tenant_id to top level
+                    metadata = dict(metadata)
+                    metadata["tenant_id"] = tenant_id
+                    object.__setattr__(job, 'metadata', metadata)
+                    return tenant_id
+        # Set default tenant_id
+        metadata = dict(metadata)
+        metadata["tenant_id"] = "default"
+        object.__setattr__(job, 'metadata', metadata)
         return "default"
     
     def _get_window_avg_usage(self, tenant: str) -> float:
