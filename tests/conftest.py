@@ -55,7 +55,7 @@ async def test_session():
 @pytest.fixture
 async def test_client():
     """Get a test client with initialized HA scheduler."""
-    from fastapi.testclient import TestClient
+    from httpx import AsyncClient
     from app.main import app
     from app.core.queue_manager import QueueManager
     from app.core.ha_scheduler import HAGlobalScheduler
@@ -70,8 +70,9 @@ async def test_client():
     await ha_scheduler.start()
     app.state.ha_scheduler = ha_scheduler
     
-    async with TestClient(app) as client:
+    async with AsyncClient(app=app, base_url="http://test") as client:
         yield client
-        
+    
+    # Cleanup
     await ha_scheduler.stop()
     await queue_manager.stop()
