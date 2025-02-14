@@ -66,10 +66,9 @@ class HAGlobalScheduler:
         """Try to acquire or maintain leadership."""
         async with get_session() as session:
             try:
-                # Create or get leader record
                 now = datetime.now(timezone.utc)
                 
-                # Try to acquire leadership
+                # First try to update existing leader record
                 stmt = (
                     update(JobModel)
                     .where(
@@ -83,7 +82,7 @@ class HAGlobalScheduler:
                     .values(
                         leader_id=self.node_id,
                         last_heartbeat=now,
-                        status=JobStatusEnum.SUBMITTED  # Ensure status is valid
+                        status=JobStatusEnum.SUBMITTED
                     )
                     .returning(JobModel)
                 )
@@ -92,46 +91,36 @@ class HAGlobalScheduler:
                 
                 if updated:
                     await session.commit()
-                    self.is_leader = True
                     return True
-                    
-                # If no leader record exists, create one
-                if not updated:
-                    try:
-                        # First check if leader record exists
-                        stmt = select(JobModel).where(JobModel.id == "leader")
-                        result = await session.execute(stmt)
-                        existing = result.scalar_one_or_none()
-                        
-                        if not existing:
-                            leader = JobModel(
-                                id="leader",
-                                name="leader",
-                                status=JobStatusEnum.SUBMITTED,  # Use enum value
-                                priority=0,
-                                job_metadata="{}",
-                                submitted_at=now,
-                                last_status_change=now,
-                                leader_id=self.node_id,
-                                last_heartbeat=now,
-                                preemption_count=0,
-                                wait_time_weight=1.0
-                            )
-                            session.add(leader)
-                            await session.commit()
-                            self.is_leader = True
-                            return True
-                    except Exception as e:
-                        print(f"Error creating leader record: {str(e)}")
-                        await session.rollback()
                 
-                self.is_leader = False
+                # If no leader record exists, create one
+                stmt = select(JobModel).where(JobModel.id == "leader")
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+                
+                if not existing:
+                    leader = JobModel(
+                        id="leader",
+                        name="leader",
+                        status=JobStatusEnum.SUBMITTED,
+                        priority=0,
+                        job_metadata="{}",
+                        submitted_at=now,
+                        last_status_change=now,
+                        leader_id=self.node_id,
+                        last_heartbeat=now,
+                        preemption_count=0,
+                        wait_time_weight=1.0
+                    )
+                    session.add(leader)
+                    await session.commit()
+                    return True
+                
                 return False
                 
             except Exception as e:
                 print(f"Error in leadership check: {str(e)}")
                 await session.rollback()
-                self.is_leader = False
                 return False
                 
     async def _sync_state(self) -> None:

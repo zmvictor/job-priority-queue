@@ -170,6 +170,10 @@ class GlobalMLScheduler:
     
     def _get_tenant(self, job: Job) -> str:
         """Get tenant ID from job metadata."""
+        # Handle nested metadata structure
+        metadata = job.metadata.get("metadata", {})
+        if isinstance(metadata, dict):
+            return metadata.get("tenant_id", "default")
         return job.metadata.get("tenant_id", "default")
     
     def _get_window_avg_usage(self, tenant: str) -> float:
