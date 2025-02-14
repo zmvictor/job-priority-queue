@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
-from app.models.job import Job, JobStatus
+from app.models.job import Job, JobStatus, JobCreate
 from app.core.queue_manager import QueueManager
 from app.core.tenant import TenantManager, ResourceUsage, UsageRecord
 from app.core.placement import PlacementOptimizer
@@ -194,7 +194,15 @@ class GlobalMLScheduler:
     
     async def _calculate_tenant_resources(self) -> Dict[str, ResourceUsage]:
         """Calculate current resource usage per tenant."""
-        resources = {"default": {"gpu": 0.0, "cpu": 0.0, "total": 0.0}}
+        # Initialize resources for all tenants with quotas
+        resources = {}
+        for tenant in self.tenant_manager._quotas:
+            resources[tenant] = {"gpu": 0.0, "cpu": 0.0, "total": 0.0}
+        
+        # Add default tenant if not present
+        if "default" not in resources:
+            resources["default"] = {"gpu": 0.0, "cpu": 0.0, "total": 0.0}
+            
         running_jobs = await self.state_manager.get_running_jobs()
         for job in running_jobs:
             tenant = self._get_tenant(job)

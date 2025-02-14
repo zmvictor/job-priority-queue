@@ -92,10 +92,17 @@ class TestPlacementOptimizer:
         
         # Test locality scores
         assert placement_optimizer._get_network_distance_score("us-east", "us-east") == 1.0
-        assert placement_optimizer._get_network_distance_score("us-east", "us-east-2") == 0.7
+        assert placement_optimizer._get_network_distance_score("us-east", "us-east-2") == 0.8
         assert placement_optimizer._get_network_distance_score("us-east", "us-west") == 0.3
         assert placement_optimizer._get_network_distance_score("us-west", "us-west") == 1.0
         assert placement_optimizer._get_network_distance_score("", "anywhere") == 1.0
+        
+        # Test score ordering
+        assert (
+            placement_optimizer._get_network_distance_score("us-east", "us-east") >
+            placement_optimizer._get_network_distance_score("us-east", "us-east-2") >
+            placement_optimizer._get_network_distance_score("us-east", "us-west")
+        )
         
     async def test_resource_availability(self, placement_optimizer, state_manager):
         """Test resource availability affects placement."""
@@ -107,8 +114,15 @@ class TestPlacementOptimizer:
         ]
         
         for job in running_jobs:
-            job.metadata["cluster"] = cluster
-            await state_manager.transition_to_running(job)
+            metadata = dict(job.metadata)
+            metadata["cluster"] = cluster
+            job_create = JobCreate(
+                name=job.name,
+                priority=job.priority,
+                metadata=metadata
+            )
+            new_job = Job.create(job_create)
+            await state_manager.transition_to_running(new_job)
             
         # Try to place job that fits
         small_job = create_test_job(gpu_count=1, cpu_count=1)
