@@ -4,6 +4,10 @@ import os
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.models.database import Base, get_session, init_db, JobModel
+from httpx import AsyncClient, ASGITransport
+from app.main import app
+from app.core.queue_manager import QueueManager
+from app.core.ha_scheduler import HAGlobalScheduler
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -39,22 +43,19 @@ async def test_session():
 @pytest.fixture
 async def test_client():
     """Get a test client with initialized HA scheduler."""
-    from httpx import AsyncClient
-    from app.main import app
-    from app.core.queue_manager import QueueManager
-    from app.core.ha_scheduler import HAGlobalScheduler
-    
     # Initialize queue manager
     queue_manager = QueueManager()
     await queue_manager.start()
-    app.state.queue_manager = queue_manager
     
-    # Initialize HA scheduler
+    # Initialize HA scheduler with unique node ID
     ha_scheduler = HAGlobalScheduler("test-node", queue_manager)
     await ha_scheduler.start()
-    app.state.ha_scheduler = ha_scheduler
     
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    # Create test client
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Store scheduler in app state
+        app.state.queue_manager = queue_manager
+        app.state.ha_scheduler = ha_scheduler
         yield client
     
     # Cleanup

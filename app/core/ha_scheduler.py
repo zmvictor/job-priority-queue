@@ -1,7 +1,7 @@
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta, timezone
 import asyncio
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 from app.models.job import Job, JobStatus, JobCreate
 from app.models.database import get_session, JobModel
 from app.core.scheduler import GlobalMLScheduler
@@ -67,27 +67,53 @@ class HAGlobalScheduler:
             try:
                 # Create or get leader record
                 now = datetime.now(timezone.utc)
-                leader_id = f"leader-{self.node_id}"
                 
-                # Try to create new leader record
-                try:
-                    leader = JobModel(
-                        id=leader_id,
-                        name="leader",
-                        status="pending",
-                        priority=0,
-                        job_metadata="{}",
-                        submitted_at=now,
-                        last_status_change=now,
+                # Try to acquire leadership
+                stmt = (
+                    update(JobModel)
+                    .where(
+                        JobModel.id == "leader",
+                        or_(
+                            JobModel.leader_id.is_(None),
+                            JobModel.leader_id == self.node_id,
+                            JobModel.last_heartbeat < now - timedelta(seconds=self.LEASE_DURATION)
+                        )
+                    )
+                    .values(
                         leader_id=self.node_id,
                         last_heartbeat=now
                     )
-                    session.add(leader)
+                    .returning(JobModel)
+                )
+                result = await session.execute(stmt)
+                updated = result.scalar_one_or_none()
+                
+                if updated:
                     await session.commit()
+                    self.is_leader = True
                     return True
-                except Exception:
-                    # Record might already exist
-                    pass
+                    
+                # If no leader record exists, create one
+                if not updated:
+                    try:
+                        leader = JobModel(
+                            id="leader",
+                            name="leader",
+                            status="pending",
+                            priority=0,
+                            job_metadata="{}",
+                            submitted_at=now,
+                            last_status_change=now,
+                            leader_id=self.node_id,
+                            last_heartbeat=now
+                        )
+                        session.add(leader)
+                        await session.commit()
+                        self.is_leader = True
+                        return True
+                    except Exception:
+                        # Record might already exist
+                        pass
                 
                 # Get existing leader record
                 stmt = select(JobModel).where(JobModel.id == leader_id)
