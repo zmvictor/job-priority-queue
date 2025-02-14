@@ -45,6 +45,7 @@ class JobModel(Base):
     preemption_count = Column(Integer, default=0)
     wait_time_weight = Column(Float, default=1.0)
     leader_id = Column(String, nullable=True)  # For HA - which node owns this job
+    last_heartbeat = Column(UTCDateTime, nullable=True)  # For HA - leader heartbeat
 
 # Async database setup
 engine = create_async_engine(

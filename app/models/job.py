@@ -63,6 +63,7 @@ class Job(BaseModel):
     preemption_count: int = Field(default=0)
     wait_time_weight: float = Field(default=1.0)
     leader_id: Optional[str] = Field(default=None)
+    credit: float = Field(default=0.0)
 
     @model_validator(mode='after')
     def make_metadata_immutable(self) -> 'Job':
