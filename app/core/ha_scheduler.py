@@ -20,6 +20,7 @@ class HAGlobalScheduler:
         self.is_leader = False
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._scheduler = GlobalMLScheduler(queue_manager)
+        self.state_manager = queue_manager.state_manager
         
     async def start(self) -> None:
         """Start the HA scheduler."""
