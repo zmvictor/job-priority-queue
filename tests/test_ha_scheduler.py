@@ -23,7 +23,9 @@ async def ha_scheduler(queue_manager, test_session):
         name="leader",
         status="pending",
         priority=0,
-        metadata={},
+        job_metadata="{}",
+        submitted_at=datetime.now(timezone.utc),
+        last_status_change=datetime.now(timezone.utc),
         leader_id=None,
         last_heartbeat=None
     )

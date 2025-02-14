@@ -17,18 +17,23 @@ async def scheduler(queue_manager):
     scheduler = GlobalMLScheduler(queue_manager)
     yield scheduler
     
-def create_test_job(priority: int = 50, gpu_count: int = 1, cpu_count: int = 1) -> Job:
+def create_test_job(priority: int = 50, gpu_count: int = 1, cpu_count: int = 1, **extra_metadata) -> Job:
     """Create a test job with given priority and resource requirements."""
+    metadata = {
+        "gpu_count": gpu_count,
+        "cpu_count": cpu_count,
+        "total_resources": gpu_count + cpu_count,
+        **extra_metadata
+    }
     job_create = JobCreate(
         name=f"test-job-{priority}",
         priority=priority,
-        metadata={
-            "gpu_count": gpu_count,
-            "cpu_count": cpu_count,
-            "total_resources": gpu_count + cpu_count
-        }
+        metadata=metadata
     )
-    return Job.create(job_create)
+    job = Job.create(job_create)
+    # Set metadata after creation to avoid immutability issues
+    object.__setattr__(job, 'metadata', metadata)
+    return job
 
 class TestGlobalMLScheduler:
     async def test_priority_levels(self, scheduler):
