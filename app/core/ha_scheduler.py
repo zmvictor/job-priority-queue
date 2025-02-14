@@ -47,15 +47,18 @@ class HAGlobalScheduler:
             try:
                 # Try to acquire or maintain leadership
                 was_leader = self.is_leader
-                self.is_leader = await self._try_acquire_leadership()
+                acquired = await self._try_acquire_leadership()
                 
-                if self.is_leader:
+                if acquired:
+                    self.is_leader = True
                     # Leader duties: schedule jobs and update state
                     await self._scheduler.update_priorities()
                     await self._scheduler.schedule()
-                elif was_leader:
-                    # Lost leadership, sync state
-                    await self._sync_state()
+                else:
+                    # Not leader, sync state if we lost leadership
+                    if was_leader:
+                        self.is_leader = False
+                        await self._sync_state()
                     
             except Exception as e:
                 print(f"Error in heartbeat: {str(e)}")
@@ -87,14 +90,13 @@ class HAGlobalScheduler:
                         last_status_change=now,
                         job_metadata="{}"  # Ensure metadata is set
                     )
-                    .returning(JobModel.leader_id)
+                    .returning(JobModel)
                 )
                 result = await session.execute(stmt)
-                updated_leader_id = result.scalar_one_or_none()
+                updated = result.scalar_one_or_none()
                 
-                if updated_leader_id == self.node_id:
+                if updated and updated.leader_id == self.node_id:
                     await session.commit()
-                    self.is_leader = True
                     return True
                 
                 # If no leader record exists, create one
