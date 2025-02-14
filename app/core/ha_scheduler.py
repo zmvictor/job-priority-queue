@@ -46,14 +46,15 @@ class HAGlobalScheduler:
         while True:
             try:
                 # Try to acquire or maintain leadership
+                was_leader = self.is_leader
                 self.is_leader = await self._try_acquire_leadership()
                 
                 if self.is_leader:
                     # Leader duties: schedule jobs and update state
                     await self._scheduler.update_priorities()
                     await self._scheduler.schedule()
-                else:
-                    # Follower duties: sync state from database
+                elif was_leader:
+                    # Lost leadership, sync state
                     await self._sync_state()
                     
             except Exception as e:
@@ -154,23 +155,26 @@ class HAGlobalScheduler:
                     object.__setattr__(new_job, 'wait_time_weight', job.wait_time_weight)
                     self.queue_manager.queue.enqueue(new_job)
                     
-    async def submit_job(self, job: Job) -> None:
+    async def submit_job(self, job: JobCreate) -> Job:
         """Submit a job to the scheduler."""
         if not self.is_leader:
             raise ValueError("Not the leader node")
             
+        # Create Job instance from JobCreate
+        new_job = Job.create(job)
+            
         # Save job to database first
         async with get_session() as session:
             db_job = JobModel(
-                id=job.id,
-                name=job.name,
-                priority=job.priority,
-                submitted_at=job.submitted_at,
+                id=new_job.id,
+                name=new_job.name,
+                priority=new_job.priority,
+                submitted_at=new_job.submitted_at,
                 status=JobStatusEnum.SUBMITTED,
-                job_metadata=json.dumps(dict(job.metadata)),
-                last_status_change=job.last_status_change,
-                preemption_count=job.preemption_count,
-                wait_time_weight=job.wait_time_weight,
+                job_metadata=json.dumps(dict(new_job.metadata)),
+                last_status_change=new_job.last_status_change,
+                preemption_count=new_job.preemption_count,
+                wait_time_weight=new_job.wait_time_weight,
                 leader_id=None,
                 last_heartbeat=None
             )
@@ -178,7 +182,8 @@ class HAGlobalScheduler:
             await session.commit()
             
         # Then submit to scheduler
-        await self._scheduler.submit_job(job)
+        await self._scheduler.submit_job(new_job)
+        return new_job
         
     async def get_job(self, job_id: str) -> Optional[Job]:
         """Get job by ID."""

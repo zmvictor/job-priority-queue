@@ -95,7 +95,9 @@ class PlacementOptimizer:
             runtime_hours = (datetime.now(timezone.utc) - j.submitted_at).total_seconds() / 3600
             priority_factor = j.priority / 100.0  # Normalize to [0,1]
             runtime_factor = min(1.0, runtime_hours / 24.0)  # Cap at 1 day
-            cost += 1.0 + priority_factor + runtime_factor
+            
+            # Higher cost for preempting higher priority jobs
+            cost += 2.0 + (priority_factor * 2.0) + runtime_factor
             
             current_gpu += j_gpu
             current_cpu += j_cpu
@@ -120,7 +122,8 @@ class PlacementOptimizer:
         # 1. Network topology
         # 2. Bandwidth measurements
         # 3. Historical transfer times
-        return self._get_network_distance_score(data_location, cluster)
+        score = self._get_network_distance_score(data_location, cluster)
+        return min(1.0, max(0.0, score))  # Ensure score is between 0 and 1
         
     def _get_network_distance_score(self, source: str, target: str) -> float:
         """Calculate network distance score between locations."""
