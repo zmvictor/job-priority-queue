@@ -40,13 +40,14 @@ class GlobalMLScheduler:
     
     def calculate_credit(self, workload: Job) -> float:
         """Calculate workload credit based on wait time and tenant resource usage."""
-        age_credit = min(workload.calculate_wait_time(), self.AGE_CAP)
+        age_credit = min(workload.calculate_wait_time() / self.AGE_CAP, 1.0)
         
         tenant = self._get_tenant(workload)
-        fair_share = 1.0 - (
-            self._get_window_avg_usage(tenant) / 
-            self._get_window_avg_usage_all_tenants()
-        )
+        all_tenant_usage = self._get_window_avg_usage_all_tenants()
+        if all_tenant_usage == 0:
+            fair_share = 1.0
+        else:
+            fair_share = 1.0 - min(1.0, self._get_window_avg_usage(tenant) / all_tenant_usage)
         
         return (
             self.WORKLOAD_AGE_WEIGHT * age_credit + 

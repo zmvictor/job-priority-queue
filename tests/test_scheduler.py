@@ -88,6 +88,7 @@ class TestGlobalMLScheduler:
         # Set quota for tenant
         tenant = "test_tenant"
         scheduler.tenant_manager.set_quota(tenant, gpu_limit=2.0, cpu_limit=4.0)
+        scheduler.tenant_manager.set_quota("default", gpu_limit=2.0, cpu_limit=4.0)
         
         # Create jobs that would exceed quota
         jobs = [
