@@ -79,14 +79,24 @@ class HAGlobalScheduler:
                 now = datetime.now(timezone.utc)
                 lease_expired = now - timedelta(seconds=self.LEASE_DURATION)
                 
-                # First try to update existing leader record
+                # First check if we're already leader
+                stmt = select(JobModel).where(JobModel.id == "leader")
+                result = await session.execute(stmt)
+                leader = result.scalar_one_or_none()
+                
+                if leader and leader.leader_id == self.node_id:
+                    # We're already leader, update heartbeat
+                    leader.last_heartbeat = now
+                    await session.commit()
+                    return True
+                
+                # Try to acquire leadership
                 stmt = (
                     update(JobModel)
                     .where(
                         JobModel.id == "leader",
                         or_(
                             JobModel.leader_id.is_(None),
-                            JobModel.leader_id == self.node_id,
                             JobModel.last_heartbeat < lease_expired
                         )
                     )
@@ -99,6 +109,31 @@ class HAGlobalScheduler:
                     )
                     .returning(JobModel)
                 )
+                result = await session.execute(stmt)
+                updated = result.scalar_one_or_none()
+                
+                if updated and updated.leader_id == self.node_id:
+                    await session.commit()
+                    return True
+                    
+                # If no leader record exists, create one
+                if not leader:
+                    leader = JobModel(
+                        id="leader",
+                        name="leader",
+                        priority=0,
+                        submitted_at=now,
+                        status=JobStatusEnum.SUBMITTED,
+                        job_metadata="{}",
+                        last_status_change=now,
+                        preemption_count=0,
+                        wait_time_weight=1.0,
+                        leader_id=self.node_id,
+                        last_heartbeat=now
+                    )
+                    session.add(leader)
+                    await session.commit()
+                    return True
                 result = await session.execute(stmt)
                 updated = result.scalar_one_or_none()
                 
