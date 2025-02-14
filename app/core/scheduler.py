@@ -56,32 +56,55 @@ class GlobalMLScheduler:
     
     async def update_priorities(self) -> None:
         """Update priorities and credits for all pending workloads."""
-        pending_jobs = await self.queue_manager.get_pending_jobs()
-        tenant_resources = self._calculate_tenant_resources()
+        # Get jobs from queue manager's priority queue
+        jobs = []
+        while (job := self.queue_manager.queue.dequeue()):
+            jobs.append(job)
+            
+        if not jobs:
+            return
+            
+        tenant_resources = await self._calculate_tenant_resources()
         
-        for job in sorted(pending_jobs, key=lambda j: j.submitted_at):
+        for job in sorted(jobs, key=lambda j: j.submitted_at):
             tenant = self._get_tenant(job)
             if self._would_exceed_quota(tenant, job, tenant_resources):
                 job.priority = self.PRIORITY_LEVELS["LOWEST"]
             else:
-                tenant_resources[tenant] += self._get_job_resources(job)
+                resources = tenant_resources[tenant]
+                job_resources = self._get_job_resources(job)
+                resources["gpu"] += job_resources["gpu"]
+                resources["cpu"] += job_resources["cpu"]
+                resources["total"] += job_resources["total"]
                 job.credit = self.calculate_credit(job)
+                
+        # Re-enqueue jobs with updated priorities
+        for job in jobs:
+            self.queue_manager.queue.enqueue(job)
     
     async def schedule(self) -> Optional[Job]:
         """Schedule the next job based on global policy."""
         # Update priorities and credits
         await self.update_priorities()
         
-        # Get all pending jobs
-        pending_jobs = await self.queue_manager.get_pending_jobs()
-        if not pending_jobs:
+        # Get next job from queue
+        job = self.queue_manager.queue.dequeue()
+        if not job:
             return None
             
-        # Sort by priority and credit
-        pending_jobs.sort(key=lambda j: (-j.priority, -j.credit))
-        
-        # Try to schedule highest priority job
-        return await self.queue_manager.schedule_next_job()
+        # Try to transition job to running
+        try:
+            updated_job = await self.state_manager.transition_to_running(job)
+            if updated_job and updated_job.status == JobStatus.RUNNING:
+                return updated_job
+        except Exception as e:
+            # If transition failed, re-enqueue job
+            self.queue_manager.queue.enqueue(job)
+            raise e
+            
+        # Re-enqueue job if scheduling failed
+        self.queue_manager.queue.enqueue(job)
+        return None
     
     async def preempt_lower_priority_jobs(self, new_job: Job) -> List[Job]:
         """Preempt lower priority running jobs if needed."""
@@ -140,10 +163,11 @@ class GlobalMLScheduler:
             return 1.0  # Avoid division by zero
         return sum(usage["total"] for usage in all_usage) / len(all_usage)
     
-    def _calculate_tenant_resources(self) -> Dict[str, ResourceUsage]:
+    async def _calculate_tenant_resources(self) -> Dict[str, ResourceUsage]:
         """Calculate current resource usage per tenant."""
         resources = {}
-        for job in self.state_manager.get_running_jobs():
+        running_jobs = await self.state_manager.get_running_jobs()
+        for job in running_jobs:
             tenant = self._get_tenant(job)
             if tenant not in resources:
                 resources[tenant] = {"gpu": 0.0, "cpu": 0.0, "total": 0.0}

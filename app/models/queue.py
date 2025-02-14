@@ -1,12 +1,15 @@
 from threading import Lock
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, TypeAlias
 import heapq
 from datetime import datetime, timezone
 from .job import Job, JobStatus
 
+# Type alias for priority tuple (negative_priority, negative_wait_time, submission_time)
+PriorityTuple: TypeAlias = tuple[float, float, float]
+
 class PriorityQueue:
     def __init__(self):
-        self._queue: List[Tuple[float, str]] = []  # (negative_priority, job_id)
+        self._queue: List[Tuple[PriorityTuple, str]] = []  # (priority_tuple, job_id)
         self._lock = Lock()
         self._job_map: Dict[str, Job] = {}  # For O(1) job lookups
         
@@ -60,7 +63,7 @@ class PriorityQueue:
             heapq.heappush(self._queue, (effective_priority, job_id))
             return True
     
-    def _calculate_priority(self, job: Job) -> tuple:
+    def _calculate_priority(self, job: Job) -> PriorityTuple:
         """Calculate effective priority including wait time factor.
         
         Priority is calculated as a tuple: (-priority, -wait_time_hours, submission_time)
@@ -70,9 +73,9 @@ class PriorityQueue:
         
         # For jobs with same priority, prioritize wait time weight
         return (
-            -job.priority,  # Base priority first
-            -job.wait_time_weight,  # Wait time weight second (higher = more negative)
-            job.submitted_at.timestamp()  # Finally by submission time
+            float(-job.priority),  # Base priority first
+            float(-job.wait_time_weight),  # Wait time weight second (higher = more negative)
+            float(job.submitted_at.timestamp())  # Finally by submission time
         )
     
     @property

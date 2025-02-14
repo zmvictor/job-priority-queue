@@ -107,6 +107,9 @@ class Job(BaseModel):
         object.__setattr__(self, 'wait_time_weight', boost)
         # Update submitted_at to ensure it's timezone-aware
         object.__setattr__(self, 'submitted_at', self.submitted_at.astimezone(timezone.utc))
+        # Set initial credit to 0
+        if not hasattr(self, 'credit'):
+            object.__setattr__(self, 'credit', 0.0)
 
     @classmethod
     def create(cls, job_create: JobCreate) -> "Job":
