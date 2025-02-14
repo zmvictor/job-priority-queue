@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
-from app.core.queue_manager import queue_manager
+from app.core.queue_manager import QueueManager
 from app.core.ha_scheduler import HAGlobalScheduler
 from contextlib import asynccontextmanager
 import uuid
@@ -12,6 +12,11 @@ async def lifespan(app: FastAPI):
     # Startup code
     from app.models.database import init_db
     await init_db()
+    
+    # Initialize queue manager
+    queue_manager = QueueManager()
+    await queue_manager.start()
+    app.state.queue_manager = queue_manager
     
     # Create HA scheduler with unique node ID
     node_id = str(uuid.uuid4())
