@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from app.models.job import Job, JobStatus
 from app.core.queue_manager import QueueManager
 from app.core.tenant import TenantManager, ResourceUsage, UsageRecord
+from app.core.placement import PlacementOptimizer
 
 class GlobalMLScheduler:
     """Global ML Scheduler (GMS) implementation based on the paper.
@@ -34,6 +35,7 @@ class GlobalMLScheduler:
         self.queue_manager = queue_manager
         self.state_manager = queue_manager.state_manager
         self.tenant_manager = TenantManager()
+        self.placement_optimizer = PlacementOptimizer(self.state_manager)
         self._tenant_resources: Dict[str, ResourceUsage] = {}
     
     def calculate_credit(self, workload: Job) -> float:
@@ -89,16 +91,36 @@ class GlobalMLScheduler:
         if not job:
             return None
             
-        # Try to transition job to running
-        try:
-            updated_job = await self.state_manager.transition_to_running(job)
-            if updated_job and updated_job.status == JobStatus.RUNNING:
-                return updated_job
-        except Exception as e:
-            # If transition failed, re-enqueue job
-            self.queue_manager.queue.enqueue(job)
-            raise e
+        # Find best cluster for job placement
+        best_cluster = None
+        best_score = -1.0
+        
+        # Get available clusters from job metadata
+        available_clusters = job.metadata.get("available_clusters", [])
+        if not available_clusters:
+            available_clusters = ["default"]  # Fallback to default cluster
             
+        # Score each cluster
+        for cluster in available_clusters:
+            score = await self.placement_optimizer.compute_placement_score(job, cluster)
+            if score > best_score:
+                best_score = score
+                best_cluster = cluster
+                
+        if best_cluster:
+            # Update job metadata with selected cluster
+            job.metadata["cluster"] = best_cluster
+            
+            # Try to transition job to running
+            try:
+                updated_job = await self.state_manager.transition_to_running(job)
+                if updated_job and updated_job.status == JobStatus.RUNNING:
+                    return updated_job
+            except Exception as e:
+                # If transition failed, re-enqueue job
+                self.queue_manager.queue.enqueue(job)
+                raise e
+                
         # Re-enqueue job if scheduling failed
         self.queue_manager.queue.enqueue(job)
         return None
