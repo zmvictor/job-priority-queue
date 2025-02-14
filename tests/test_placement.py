@@ -80,7 +80,7 @@ class TestPlacementOptimizer:
                     priority=new_job.priority,
                     submitted_at=new_job.submitted_at,
                     status=JobStatusEnum.SUBMITTED,
-                    job_metadata=json.dumps(new_job.metadata),
+                    job_metadata=json.dumps(dict(new_job.metadata)),
                     last_status_change=new_job.last_status_change,
                     preemption_count=new_job.preemption_count,
                     wait_time_weight=new_job.wait_time_weight
@@ -151,7 +151,7 @@ class TestPlacementOptimizer:
                     priority=new_job.priority,
                     submitted_at=new_job.submitted_at,
                     status=JobStatusEnum.SUBMITTED,
-                    job_metadata=json.dumps(new_job.metadata),
+                    job_metadata=json.dumps(dict(new_job.metadata)),
                     last_status_change=new_job.last_status_change,
                     preemption_count=new_job.preemption_count,
                     wait_time_weight=new_job.wait_time_weight
