@@ -3,9 +3,10 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 from sqlalchemy import select, update, or_
 from app.models.job import Job, JobStatus, JobCreate
-from app.models.database import get_session, JobModel
+from app.models.database import get_session, JobModel, JobStatusEnum
 from app.core.scheduler import GlobalMLScheduler
 from app.core.queue_manager import QueueManager
+import json
 
 class HAGlobalScheduler:
     """High-availability Global ML Scheduler with leader-follower mode."""
@@ -115,28 +116,6 @@ class HAGlobalScheduler:
                         # Record might already exist
                         pass
                 
-                # Get existing leader record
-                stmt = select(JobModel).where(JobModel.id == leader_id)
-                result = await session.execute(stmt)
-                leader = result.scalar_one_or_none()
-                
-                if not leader:
-                    return False
-                
-                # Check if we can take leadership
-                can_take_leadership = (
-                    leader.leader_id is None or
-                    leader.leader_id == self.node_id or
-                    (leader.last_heartbeat and leader.last_heartbeat < now - timedelta(seconds=self.LEASE_DURATION))
-                )
-                
-                if can_take_leadership:
-                    # Update leader record
-                    leader.leader_id = self.node_id
-                    leader.last_heartbeat = now
-                    await session.commit()
-                    return True
-                    
                 return False
                 
             except Exception as e:
@@ -175,6 +154,26 @@ class HAGlobalScheduler:
         """Submit a job to the scheduler."""
         if not self.is_leader:
             raise ValueError("Not the leader node")
+            
+        # Save job to database first
+        async with get_session() as session:
+            db_job = JobModel(
+                id=job.id,
+                name=job.name,
+                priority=job.priority,
+                submitted_at=job.submitted_at,
+                status=JobStatusEnum.SUBMITTED,
+                job_metadata=json.dumps(dict(job.metadata)),
+                last_status_change=job.last_status_change,
+                preemption_count=job.preemption_count,
+                wait_time_weight=job.wait_time_weight,
+                leader_id=None,
+                last_heartbeat=None
+            )
+            session.add(db_job)
+            await session.commit()
+            
+        # Then submit to scheduler
         await self._scheduler.submit_job(job)
         
     async def get_job(self, job_id: str) -> Optional[Job]:
