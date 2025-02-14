@@ -33,10 +33,13 @@ class PlacementOptimizer:
         else:
             normalized_cost = 1.0  # No preemption needed
             
-        return (
+        score = (
             self.PREEMPTION_WEIGHT * normalized_cost +
             self.LOCALITY_WEIGHT * locality_score
         )
+        
+        # Ensure score is between 0 and 1
+        return min(1.0, max(0.0, score))
         
     async def _calculate_preemption_cost(self, job: Job, running_jobs: List[Job], cluster: str) -> float:
         """Calculate preemption cost for placing job in cluster.

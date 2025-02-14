@@ -83,7 +83,8 @@ class HAGlobalScheduler:
                     .values(
                         leader_id=self.node_id,
                         last_heartbeat=now,
-                        status=JobStatusEnum.SUBMITTED
+                        status=JobStatusEnum.SUBMITTED,
+                        last_status_change=now
                     )
                     .returning(JobModel)
                 )
