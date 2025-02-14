@@ -127,9 +127,12 @@ class PlacementOptimizer:
         
     def _get_network_distance_score(self, source: str, target: str) -> float:
         """Calculate network distance score between locations."""
-        # TODO: Implement actual network topology scoring
+        # Handle empty source location (no preference)
+        if not source:
+            return 1.0
+            
         # For now, return:
-        # 1.0 for same location
+        # 1.0 for same location or no preference
         # 0.8 for same region
         # 0.3 for different regions
         if source == target:

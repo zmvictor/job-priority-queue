@@ -112,14 +112,20 @@ class GlobalMLScheduler:
             # Create new job with updated metadata
             metadata = dict(job.metadata)
             metadata["cluster"] = best_cluster
+            metadata["tenant_id"] = self._get_tenant(job)  # Ensure tenant ID is set
             job_create = JobCreate(
                 name=job.name,
                 priority=job.priority,
                 metadata=metadata
             )
             new_job = Job.create(job_create)
-            # Preserve original job ID
+            # Preserve original job ID and other fields
             object.__setattr__(new_job, 'id', job.id)
+            object.__setattr__(new_job, 'submitted_at', job.submitted_at)
+            object.__setattr__(new_job, 'last_status_change', job.last_status_change)
+            object.__setattr__(new_job, 'preemption_count', job.preemption_count)
+            object.__setattr__(new_job, 'wait_time_weight', job.wait_time_weight)
+            object.__setattr__(new_job, 'credit', job.credit)
             job = new_job
             
             # Try to transition job to running
