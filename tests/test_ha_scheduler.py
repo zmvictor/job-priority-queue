@@ -1,6 +1,7 @@
 import pytest
 import asyncio
 from datetime import datetime, timedelta, timezone
+from sqlalchemy import select
 from app.models.job import Job, JobCreate, JobStatus
 from app.core.ha_scheduler import HAGlobalScheduler
 from app.core.queue_manager import QueueManager

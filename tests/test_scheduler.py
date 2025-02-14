@@ -126,3 +126,71 @@ class TestGlobalMLScheduler:
         # Verify high priority job gets scheduled
         scheduled_job = await scheduler.schedule()
         assert scheduled_job.id == high_job.id
+        
+    async def test_fair_share(self, scheduler):
+        """Test fair share scheduling between tenants."""
+        # Create jobs for different tenants
+        tenant1_jobs = [
+            create_test_job(priority=50, gpu_count=1),
+            create_test_job(priority=50, gpu_count=1)
+        ]
+        tenant2_jobs = [
+            create_test_job(priority=50, gpu_count=1),
+            create_test_job(priority=50, gpu_count=1)
+        ]
+        
+        # Set tenant IDs
+        for job in tenant1_jobs:
+            job.metadata["tenant_id"] = "tenant1"
+        for job in tenant2_jobs:
+            job.metadata["tenant_id"] = "tenant2"
+            
+        # Submit all jobs
+        for job in tenant1_jobs + tenant2_jobs:
+            await scheduler.submit_job(job)
+            
+        # Update priorities
+        await scheduler.update_priorities()
+        
+        # Verify fair share between tenants
+        scheduled_jobs = []
+        while (job := await scheduler.schedule()):
+            scheduled_jobs.append(job)
+            
+        # Should alternate between tenants
+        tenant_order = [job.metadata["tenant_id"] for job in scheduled_jobs]
+        assert tenant_order.count("tenant1") == 2
+        assert tenant_order.count("tenant2") == 2
+        
+    async def test_data_locality(self, scheduler):
+        """Test data locality aware scheduling."""
+        # Create jobs with different data locations
+        jobs = [
+            create_test_job(priority=50),  # No location preference
+            create_test_job(priority=50),  # Same location as cluster
+            create_test_job(priority=50)   # Different location
+        ]
+        
+        # Set data locations
+        jobs[1].metadata["data_location"] = "us-east"
+        jobs[2].metadata["data_location"] = "us-west"
+        
+        # Set available clusters
+        for job in jobs:
+            job.metadata["available_clusters"] = ["us-east", "us-west"]
+            
+        # Submit jobs
+        for job in jobs:
+            await scheduler.submit_job(job)
+            
+        # Schedule jobs
+        scheduled_jobs = []
+        while (job := await scheduler.schedule()):
+            scheduled_jobs.append(job)
+            
+        # Verify data locality preferences
+        for job in scheduled_jobs:
+            if job.metadata.get("data_location") == "us-east":
+                assert job.metadata["cluster"] == "us-east"
+            elif job.metadata.get("data_location") == "us-west":
+                assert job.metadata["cluster"] == "us-west"
