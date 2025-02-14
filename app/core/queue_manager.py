@@ -1,7 +1,7 @@
 from typing import Optional, List
 from fastapi import HTTPException
 import json
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import update, select
 from app.models.job import Job, JobCreate, JobStatus, JobJSONEncoder
 from app.models.queue import PriorityQueue

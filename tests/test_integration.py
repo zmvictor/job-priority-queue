@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import update, select
@@ -164,7 +164,8 @@ class TestJobLifecycle:
             job_id = response.json()["id"]
             job = await queue_manager.get_job(job_id)
             # Age jobs differently and ensure timezone awareness
-            job.submitted_at = (job.submitted_at - timedelta(hours=i * 12)).replace(tzinfo=UTC)  # 0h, 12h, 24h old
+            assert job is not None
+            job.submitted_at = (job.submitted_at - timedelta(hours=i * 12)).replace(tzinfo=timezone.utc)  # 0h, 12h, 24h old
             job.last_status_change = job.submitted_at  # Update last_status_change to match
             job.update_wait_time_weight()  # Update weight based on new submitted_at
             jobs.append(job)
@@ -175,7 +176,7 @@ class TestJobLifecycle:
                     update(JobModel)
                     .where(JobModel.id == job.id)
                     .values(
-                        submitted_at=job.submitted_at.astimezone(UTC),
+                        submitted_at=job.submitted_at.astimezone(timezone.utc),
                         last_status_change=job.last_status_change,
                         wait_time_weight=job.wait_time_weight
                     )
@@ -188,7 +189,7 @@ class TestJobLifecycle:
                     select(JobModel).where(JobModel.id == job.id)
                 )
                 db_job = result.scalar_one()
-                assert db_job.submitted_at.tzinfo == UTC
+                assert db_job.submitted_at.tzinfo == timezone.utc
                 assert db_job.wait_time_weight == job.wait_time_weight
                 assert db_job.wait_time_weight > 1.0  # Ensure weight is boosted for aged jobs
         

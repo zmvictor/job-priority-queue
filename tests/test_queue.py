@@ -1,10 +1,10 @@
 import pytest
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from app.models.job import Job, JobStatus, JobCreate
 from app.models.queue import PriorityQueue
 
 def create_test_job(priority: int, submitted_delta: timedelta = timedelta()) -> Job:
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     return Job(
         id=f"test-{priority}",
         name=f"test-job-{priority}",
@@ -24,9 +24,12 @@ class TestPriorityQueue:
             queue.enqueue(job)
         
         # Should dequeue in priority order (highest first)
-        assert queue.dequeue().priority == 2
-        assert queue.dequeue().priority == 1
-        assert queue.dequeue().priority == 0
+        job = queue.dequeue()
+        assert job is not None and job.priority == 2
+        job = queue.dequeue()
+        assert job is not None and job.priority == 1
+        job = queue.dequeue()
+        assert job is not None and job.priority == 0
         assert queue.dequeue() is None
 
     def test_wait_time_priority_boost(self):
@@ -40,7 +43,7 @@ class TestPriorityQueue:
         
         # Old job should come out first due to wait time boost
         dequeued = queue.dequeue()
-        assert dequeued.id == old_job.id
+        assert dequeued is not None and dequeued.id == old_job.id
         
         # Verify the priority calculation
         old_priority = queue._calculate_priority(old_job)
@@ -94,7 +97,7 @@ class TestPriorityQueue:
         
         # Remove should return and remove the job
         removed = queue.remove(job.id)
-        assert removed.id == job.id
+        assert removed is not None and removed.id == job.id
         assert queue.get_job(job.id) is None
         
         # Remove non-existent job should return None
@@ -128,8 +131,9 @@ class TestPriorityQueue:
         
         # Peek should return job without removing
         peeked = queue.peek()
-        assert peeked.id == job.id
+        assert peeked is not None and peeked.id == job.id
         assert queue.size == 1
         
         # Peek again should return same job
-        assert queue.peek().id == job.id
+        peeked = queue.peek()
+        assert peeked is not None and peeked.id == job.id

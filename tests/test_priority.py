@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import update
 from app.models.job import Job, JobCreate, JobStatus
 from app.core.queue_manager import queue_manager
@@ -27,7 +27,7 @@ async def setup_jobs():
 async def test_priority_adjustment(setup_jobs):
     jobs = setup_jobs
     # Simulate 12 hours wait time
-    jobs[0].submitted_at = datetime.now(UTC) - timedelta(hours=12)
+    jobs[0].submitted_at = datetime.now(timezone.utc) - timedelta(hours=12)
     
     # Priority weight should be 1.5x after 12 hours
     wait_time = jobs[0].calculate_wait_time()
@@ -84,7 +84,7 @@ async def test_wait_time_boost(setup_jobs):
     # Set different wait times
     wait_times = [24, 12, 6]  # hours
     for job, hours in zip(jobs, wait_times):
-        job.submitted_at = datetime.now(UTC) - timedelta(hours=hours)
+        job.submitted_at = datetime.now(timezone.utc) - timedelta(hours=hours)
     
     # Verify wait time weights
     for job, hours in zip(jobs, wait_times):

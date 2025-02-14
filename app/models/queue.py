@@ -1,7 +1,7 @@
 from threading import Lock
 from typing import Optional, List, Dict, Tuple
 import heapq
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from .job import Job, JobStatus
 
 class PriorityQueue:

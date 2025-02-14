@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import update
 from app.models.job import JobCreate, JobStatus
 from app.core.queue_manager import QueueManager
@@ -76,8 +76,8 @@ class TestQueueManager:
         assert preempted.preemption_count == 1
         
         # Ensure all datetimes are timezone-aware
-        preempted.submitted_at = preempted.submitted_at.replace(tzinfo=UTC)
-        preempted.last_status_change = preempted.last_status_change.replace(tzinfo=UTC)
+        preempted.submitted_at = preempted.submitted_at.replace(tzinfo=timezone.utc)
+        preempted.last_status_change = preempted.last_status_change.replace(tzinfo=timezone.utc)
         
         # job2 should be scheduled next
         scheduled = await manager.schedule_next_job()

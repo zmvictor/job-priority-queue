@@ -1,12 +1,12 @@
 import pytest
 import os
 import json
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from app.models.job import Job, JobStatus
 from app.core.state import JobStateManager
 
 def create_test_job(job_id: str = "test-1", priority: int = 50) -> Job:
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     return Job(
         id=job_id,
         name=f"test-job-{job_id}",

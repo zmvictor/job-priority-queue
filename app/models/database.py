@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, TypeDecorator, event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -12,13 +12,13 @@ class UTCDateTime(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is not None:
             if value.tzinfo is None:
-                value = value.replace(tzinfo=UTC)
+                value = value.replace(tzinfo=timezone.utc)
             return value
         return value
 
     def process_result_value(self, value, dialect):
         if value is not None:
-            return value.replace(tzinfo=UTC)
+            return value.replace(tzinfo=timezone.utc)
         return value
 
 Base = declarative_base()
