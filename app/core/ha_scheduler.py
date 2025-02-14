@@ -63,25 +63,33 @@ class HAGlobalScheduler:
         """Try to acquire or maintain leadership."""
         async with get_session() as session:
             try:
-                # Update or insert leader record
-                stmt = update(JobModel).where(
-                    JobModel.id == "leader",
-                    (
-                        JobModel.leader_id.is_(None) |
-                        (JobModel.leader_id == self.node_id) |
-                        (JobModel.last_heartbeat < datetime.now(timezone.utc) - timedelta(seconds=self.LEASE_DURATION))
-                    )
-                ).values(
-                    leader_id=self.node_id,
-                    last_heartbeat=datetime.now(timezone.utc)
-                )
+                # Get current leader record
+                stmt = select(JobModel).where(JobModel.id == "leader")
                 result = await session.execute(stmt)
-                await session.commit()
+                leader = result.scalar_one_or_none()
                 
-                # Check if we got/maintained leadership
-                return result.rowcount > 0
+                if not leader:
+                    return False
                 
-            except Exception:
+                # Check if we can take leadership
+                now = datetime.now(timezone.utc)
+                can_take_leadership = (
+                    leader.leader_id is None or
+                    leader.leader_id == self.node_id or
+                    (leader.last_heartbeat and leader.last_heartbeat < now - timedelta(seconds=self.LEASE_DURATION))
+                )
+                
+                if can_take_leadership:
+                    # Update leader record
+                    leader.leader_id = self.node_id
+                    leader.last_heartbeat = now
+                    await session.commit()
+                    return True
+                    
+                return False
+                
+            except Exception as e:
+                print(f"Error in leadership check: {str(e)}")
                 return False
                 
     async def _sync_state(self) -> None:

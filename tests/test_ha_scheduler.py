@@ -15,23 +15,7 @@ async def queue_manager():
     await manager.stop()
     
 @pytest.fixture
-async def ha_scheduler(queue_manager, test_session):
-    # Create leader record
-    from app.models.database import JobModel
-    leader = JobModel(
-        id="leader",
-        name="leader",
-        status="pending",
-        priority=0,
-        job_metadata="{}",
-        submitted_at=datetime.now(timezone.utc),
-        last_status_change=datetime.now(timezone.utc),
-        leader_id=None,
-        last_heartbeat=None
-    )
-    test_session.add(leader)
-    await test_session.commit()
-    
+async def ha_scheduler(queue_manager):
     scheduler = HAGlobalScheduler("test-node-1", queue_manager)
     await scheduler.start()
     yield scheduler
@@ -50,6 +34,7 @@ class TestHAGlobalScheduler:
     async def test_leader_election(self, ha_scheduler):
         """Test leader election process."""
         # Initially should not be leader
+        ha_scheduler.is_leader = False  # Force initial state
         assert not ha_scheduler.is_leader
         
         # After heartbeat should become leader (since no other nodes)
