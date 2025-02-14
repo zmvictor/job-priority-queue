@@ -50,14 +50,20 @@ class HAGlobalScheduler:
                 acquired = await self._try_acquire_leadership()
                 
                 if acquired:
+                    if not was_leader:
+                        # Just became leader, sync state
+                        await self._sync_state()
                     self.is_leader = True
                     # Leader duties: schedule jobs and update state
                     await self._scheduler.update_priorities()
                     await self._scheduler.schedule()
                 else:
-                    # Not leader, sync state if we lost leadership
                     if was_leader:
+                        # Lost leadership, sync state
                         self.is_leader = False
+                        await self._sync_state()
+                    else:
+                        # Not leader, sync state periodically
                         await self._sync_state()
                     
             except Exception as e:
@@ -71,6 +77,7 @@ class HAGlobalScheduler:
         async with get_session() as session:
             try:
                 now = datetime.now(timezone.utc)
+                lease_expired = now - timedelta(seconds=self.LEASE_DURATION)
                 
                 # First try to update existing leader record
                 stmt = (
@@ -80,7 +87,7 @@ class HAGlobalScheduler:
                         or_(
                             JobModel.leader_id.is_(None),
                             JobModel.leader_id == self.node_id,
-                            JobModel.last_heartbeat < now - timedelta(seconds=self.LEASE_DURATION)
+                            JobModel.last_heartbeat < lease_expired
                         )
                     )
                     .values(
