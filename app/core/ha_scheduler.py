@@ -36,6 +36,8 @@ class HAGlobalScheduler:
                 await self._heartbeat_task
             except asyncio.CancelledError:
                 pass
+            self._heartbeat_task = None
+            self.is_leader = False
         await self.queue_manager.stop()
         
     async def _run_heartbeat(self) -> None:
@@ -63,8 +65,32 @@ class HAGlobalScheduler:
         """Try to acquire or maintain leadership."""
         async with get_session() as session:
             try:
-                # Get current leader record
-                stmt = select(JobModel).where(JobModel.id == "leader")
+                # Create or get leader record
+                now = datetime.now(timezone.utc)
+                leader_id = f"leader-{self.node_id}"
+                
+                # Try to create new leader record
+                try:
+                    leader = JobModel(
+                        id=leader_id,
+                        name="leader",
+                        status="pending",
+                        priority=0,
+                        job_metadata="{}",
+                        submitted_at=now,
+                        last_status_change=now,
+                        leader_id=self.node_id,
+                        last_heartbeat=now
+                    )
+                    session.add(leader)
+                    await session.commit()
+                    return True
+                except Exception:
+                    # Record might already exist
+                    pass
+                
+                # Get existing leader record
+                stmt = select(JobModel).where(JobModel.id == leader_id)
                 result = await session.execute(stmt)
                 leader = result.scalar_one_or_none()
                 
@@ -72,7 +98,6 @@ class HAGlobalScheduler:
                     return False
                 
                 # Check if we can take leadership
-                now = datetime.now(timezone.utc)
                 can_take_leadership = (
                     leader.leader_id is None or
                     leader.leader_id == self.node_id or

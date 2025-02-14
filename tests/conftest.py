@@ -21,22 +21,6 @@ async def setup_database():
     # Initialize database
     await init_db()
     
-    # Create leader record
-    async with get_session() as session:
-        leader = JobModel(
-            id="leader",
-            name="leader",
-            status="pending",
-            priority=0,
-            job_metadata="{}",
-            submitted_at=datetime.now(timezone.utc),
-            last_status_change=datetime.now(timezone.utc),
-            leader_id=None,
-            last_heartbeat=None
-        )
-        session.add(leader)
-        await session.commit()
-    
     yield
     
     # Cleanup after test
