@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from typing import List
 import json
 from sqlalchemy import select
@@ -12,26 +12,34 @@ __all__ = ['router']
 router = APIRouter()
 
 @router.post("/jobs", response_model=Job)
-async def submit_job(job: JobCreate):
+async def submit_job(job: JobCreate, request: Request):
     """Submit a new job to the priority queue."""
-    return await queue_manager.submit_job(job)
+    ha_scheduler = request.app.state.ha_scheduler
+    if not ha_scheduler.is_leader:
+        raise HTTPException(status_code=503, detail="Not the leader node")
+    return await ha_scheduler.submit_job(job)
 
 @router.get("/jobs/{job_id}", response_model=Job)
-async def get_job(job_id: str):
+async def get_job(job_id: str, request: Request):
     """Get job status by ID."""
-    job = await queue_manager.get_job(job_id)
+    ha_scheduler = request.app.state.ha_scheduler
+    job = await ha_scheduler.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 @router.post("/jobs/{job_id}/preempt", response_model=Job)
-async def preempt_job(job_id: str):
+async def preempt_job(job_id: str, request: Request):
     """Preempt a running job."""
     import logging
     logger = logging.getLogger(__name__)
     try:
+        ha_scheduler = request.app.state.ha_scheduler
+        if not ha_scheduler.is_leader:
+            raise HTTPException(status_code=503, detail="Not the leader node")
+            
         # Get job state first
-        job = await queue_manager.get_job(job_id)
+        job = await ha_scheduler.get_job(job_id)
         if not job:
             logger.error(f"Job {job_id} not found")
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
@@ -61,20 +69,27 @@ async def preempt_job(job_id: str):
         raise HTTPException(status_code=500, detail=error_detail)
 
 @router.get("/jobs", response_model=List[Job])
-async def list_running_jobs():
+async def list_running_jobs(request: Request):
     """List all currently running jobs."""
-    return await queue_manager.get_running_jobs()
+    ha_scheduler = request.app.state.ha_scheduler
+    return await ha_scheduler.queue_manager.get_running_jobs()
 
 @router.post("/jobs/schedule", response_model=Job)
-async def schedule_next_job():
+async def schedule_next_job(request: Request):
     """Schedule the next job from the queue."""
-    job = await queue_manager.schedule_next_job()
+    ha_scheduler = request.app.state.ha_scheduler
+    if not ha_scheduler.is_leader:
+        raise HTTPException(status_code=503, detail="Not the leader node")
+    job = await ha_scheduler.queue_manager.schedule_next_job()
     if not job:
         raise HTTPException(status_code=404, detail="No jobs in queue")
     return job
 
 @router.post("/jobs/update-priorities")
-async def update_job_priorities():
+async def update_job_priorities(request: Request):
     """Update priorities of all queued jobs based on wait time."""
-    await queue_manager.update_priorities()
+    ha_scheduler = request.app.state.ha_scheduler
+    if not ha_scheduler.is_leader:
+        raise HTTPException(status_code=503, detail="Not the leader node")
+    await ha_scheduler.queue_manager.update_priorities()
     return {"status": "ok"}
