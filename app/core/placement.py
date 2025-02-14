@@ -28,8 +28,11 @@ class PlacementOptimizer:
         locality_score = self._calculate_locality_score(job, cluster)
         
         # Normalize preemption cost to [0, 1] range where 1 is best (no preemption)
-        normalized_cost = 1.0 - min(1.0, preemption_cost / len(running_jobs))
-        
+        if running_jobs:
+            normalized_cost = 1.0 - min(1.0, preemption_cost / len(running_jobs))
+        else:
+            normalized_cost = 1.0  # No preemption needed
+            
         return (
             self.PREEMPTION_WEIGHT * normalized_cost +
             self.LOCALITY_WEIGHT * locality_score
@@ -122,12 +125,12 @@ class PlacementOptimizer:
         # TODO: Implement actual network topology scoring
         # For now, return:
         # 1.0 for same location
-        # 0.7 for same region
+        # 0.8 for same region
         # 0.3 for different regions
         if source == target:
             return 1.0
         if source.split("-")[0] == target.split("-")[0]:  # Same region
-            return 0.7
+            return 0.8
         return 0.3
         
     def _get_cluster_gpu_capacity(self, cluster: str) -> float:

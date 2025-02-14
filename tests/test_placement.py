@@ -47,7 +47,9 @@ class TestPlacementOptimizer:
         
         # Verify locality affects scores
         assert same_loc_score > same_region_score > diff_region_score
-        assert 0.0 <= diff_region_score <= same_region_score <= same_loc_score <= 1.0
+        assert 0.0 <= diff_region_score <= 0.3  # Different region score
+        assert 0.7 <= same_region_score <= 0.8  # Same region score
+        assert 0.9 <= same_loc_score <= 1.0     # Same location score
         
     async def test_preemption_cost(self, placement_optimizer, state_manager):
         """Test preemption cost calculation."""
@@ -58,8 +60,16 @@ class TestPlacementOptimizer:
         ]
         
         for job in running_jobs:
-            job.metadata["cluster"] = "test-cluster"
-            await state_manager.transition_to_running(job)
+            # Create new job with cluster metadata
+            metadata = dict(job.metadata)
+            metadata["cluster"] = "test-cluster"
+            job_create = JobCreate(
+                name=job.name,
+                priority=job.priority,
+                metadata=metadata
+            )
+            new_job = Job.create(job_create)
+            await state_manager.transition_to_running(new_job)
             
         # Calculate cost for new job that requires preemption
         new_job = create_test_job(priority=50, gpu_count=2)  # Requires preempting
