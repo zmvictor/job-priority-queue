@@ -38,15 +38,25 @@ def create_test_job(priority: int = 50, gpu_count: int = 1, cpu_count: int = 1, 
 class TestGlobalMLScheduler:
     async def test_priority_levels(self, scheduler):
         """Test priority level assignments."""
-        # Create jobs with different priorities
-        jobs = [
-            create_test_job(priority=scheduler.PRIORITY_LEVELS["CRITICAL"]),
-            create_test_job(priority=scheduler.PRIORITY_LEVELS["HIGH"]),
-            create_test_job(priority=scheduler.PRIORITY_LEVELS["MEDIUM_HIGH"])
-        ]
-        
-        # Initialize default tenant quota
+        # Initialize all tenants with quotas
         scheduler.tenant_manager.set_quota("default", gpu_limit=10.0, cpu_limit=20.0)
+        scheduler.tenant_manager.set_quota("test_tenant", gpu_limit=10.0, cpu_limit=20.0)
+        
+        # Create jobs with different priorities and metadata
+        jobs = [
+            create_test_job(
+                priority=scheduler.PRIORITY_LEVELS["CRITICAL"],
+                metadata={"gpu_count": 1, "cpu_count": 1, "tenant_id": "test_tenant"}
+            ),
+            create_test_job(
+                priority=scheduler.PRIORITY_LEVELS["HIGH"],
+                metadata={"gpu_count": 1, "cpu_count": 1, "tenant_id": "test_tenant"}
+            ),
+            create_test_job(
+                priority=scheduler.PRIORITY_LEVELS["MEDIUM_HIGH"],
+                metadata={"gpu_count": 1, "cpu_count": 1, "tenant_id": "test_tenant"}
+            )
+        ]
         
         # Submit jobs
         for job in jobs:
@@ -141,15 +151,16 @@ class TestGlobalMLScheduler:
         # Initialize tenants with quotas
         scheduler.tenant_manager.set_quota("tenant1", gpu_limit=4.0, cpu_limit=8.0)
         scheduler.tenant_manager.set_quota("tenant2", gpu_limit=4.0, cpu_limit=8.0)
+        scheduler.tenant_manager.set_quota("default", gpu_limit=4.0, cpu_limit=8.0)
         
         # Create jobs for different tenants
         tenant1_jobs = [
-            create_test_job(priority=50, gpu_count=1, tenant_id="tenant1"),
-            create_test_job(priority=50, gpu_count=1, tenant_id="tenant1")
+            create_test_job(priority=50, gpu_count=1, metadata={"tenant_id": "tenant1", "gpu_count": 1, "cpu_count": 1}),
+            create_test_job(priority=50, gpu_count=1, metadata={"tenant_id": "tenant1", "gpu_count": 1, "cpu_count": 1})
         ]
         tenant2_jobs = [
-            create_test_job(priority=50, gpu_count=1, tenant_id="tenant2"),
-            create_test_job(priority=50, gpu_count=1, tenant_id="tenant2")
+            create_test_job(priority=50, gpu_count=1, metadata={"tenant_id": "tenant2", "gpu_count": 1, "cpu_count": 1}),
+            create_test_job(priority=50, gpu_count=1, metadata={"tenant_id": "tenant2", "gpu_count": 1, "cpu_count": 1})
         ]
             
         # Submit all jobs

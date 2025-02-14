@@ -109,8 +109,15 @@ class GlobalMLScheduler:
                 best_cluster = cluster
                 
         if best_cluster:
-            # Update job metadata with selected cluster
-            job.metadata["cluster"] = best_cluster
+            # Create new job with updated metadata
+            metadata = dict(job.metadata)
+            metadata["cluster"] = best_cluster
+            job_create = JobCreate(
+                name=job.name,
+                priority=job.priority,
+                metadata=metadata
+            )
+            job = Job.create(job_create)
             
             # Try to transition job to running
             try:
