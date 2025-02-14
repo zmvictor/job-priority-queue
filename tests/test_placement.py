@@ -113,7 +113,7 @@ class TestPlacementOptimizer:
         # Test locality scores
         assert placement_optimizer._get_network_distance_score("us-east", "us-east") == 1.0
         assert placement_optimizer._get_network_distance_score("us-east", "us-east-2") == 0.8
-        assert placement_optimizer._get_network_distance_score("us-east", "us-west") == 0.3
+        assert placement_optimizer._get_network_distance_score("us-east", "us-west") == 0.3  # Different region
         assert placement_optimizer._get_network_distance_score("us-west", "us-west") == 1.0
         assert placement_optimizer._get_network_distance_score("", "anywhere") == 1.0
         

@@ -3,13 +3,14 @@ import asyncio
 import os
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.models.database import Base, get_session, init_db, JobModel
+from sqlalchemy import text
+from app.models.database import Base, get_session, init_db, JobModel, JobStatusEnum
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.queue_manager import QueueManager
 from app.core.ha_scheduler import HAGlobalScheduler
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def event_loop():
     """Create an instance of the default event loop for each test case."""
     loop = asyncio.get_event_loop_policy().new_event_loop()

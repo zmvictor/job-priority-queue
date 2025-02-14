@@ -93,7 +93,9 @@ class PlacementOptimizer:
             # 2. Priority factor (higher priority = higher cost)
             # 3. Runtime factor (longer runtime = higher cost)
             runtime_hours = (datetime.now(timezone.utc) - j.submitted_at).total_seconds() / 3600
-            cost += 1.0 + (j.priority / 100.0) + min(1.0, runtime_hours / 24.0)
+            priority_factor = j.priority / 100.0  # Normalize to [0,1]
+            runtime_factor = min(1.0, runtime_hours / 24.0)  # Cap at 1 day
+            cost += 1.0 + priority_factor + runtime_factor
             
             current_gpu += j_gpu
             current_cpu += j_cpu
