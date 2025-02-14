@@ -1,6 +1,8 @@
 import pytest
+import json
 from datetime import datetime, timedelta, timezone
 from app.models.job import Job, JobCreate, JobStatus
+from app.models.database import get_session, JobModel, JobStatusEnum
 from app.core.placement import PlacementOptimizer
 from app.core.state_manager import HAJobStateManager
 
