@@ -44,7 +44,7 @@ class TestJobLifecycle:
         """Test the complete lifecycle of a job through the API."""
         # Submit job
         job_data = {"name": "training-job", "priority": 50}
-        response = await client.post("/api/v1/jobs", json=job_data)
+        response = client.post("/api/v1/jobs", json=job_data)
         assert response.status_code == 200
         job_id = response.json()["id"]
         
@@ -165,7 +165,7 @@ class TestJobLifecycle:
         # Submit jobs with same priority but different timestamps
         jobs = []
         for i in range(3):
-            response = await client.post("/api/v1/jobs", json={"name": f"job-{i}", "priority": 50})
+            response = client.post("/api/v1/jobs", json={"name": f"job-{i}", "priority": 50})
             job_id = response.json()["id"]
             job = await queue_manager.get_job(job_id)
             # Age jobs differently and ensure timezone awareness
