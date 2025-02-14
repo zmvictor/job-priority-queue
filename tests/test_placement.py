@@ -75,17 +75,17 @@ class TestPlacementOptimizer:
         """Test data locality scoring."""
         # Create jobs with different data locations
         jobs = [
-            create_test_job(data_location="us-east"),
-            create_test_job(data_location="us-west"),
-            create_test_job(data_location="")  # No location preference
+            create_test_job(priority=50, data_location="us-east"),
+            create_test_job(priority=50, data_location="us-west"),
+            create_test_job(priority=50)  # No location preference
         ]
         
         # Test locality scores
-        assert placement_optimizer._calculate_locality_score(jobs[0], "us-east") == 1.0
-        assert placement_optimizer._calculate_locality_score(jobs[0], "us-east-2") == 0.7
-        assert placement_optimizer._calculate_locality_score(jobs[0], "us-west") == 0.3
-        assert placement_optimizer._calculate_locality_score(jobs[1], "us-west") == 1.0
-        assert placement_optimizer._calculate_locality_score(jobs[2], "anywhere") == 1.0
+        assert placement_optimizer._get_network_distance_score("us-east", "us-east") == 1.0
+        assert placement_optimizer._get_network_distance_score("us-east", "us-east-2") == 0.7
+        assert placement_optimizer._get_network_distance_score("us-east", "us-west") == 0.3
+        assert placement_optimizer._get_network_distance_score("us-west", "us-west") == 1.0
+        assert placement_optimizer._get_network_distance_score("", "anywhere") == 1.0
         
     async def test_resource_availability(self, placement_optimizer, state_manager):
         """Test resource availability affects placement."""

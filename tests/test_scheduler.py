@@ -42,8 +42,11 @@ class TestGlobalMLScheduler:
         jobs = [
             create_test_job(priority=scheduler.PRIORITY_LEVELS["CRITICAL"]),
             create_test_job(priority=scheduler.PRIORITY_LEVELS["HIGH"]),
-            create_test_job(priority=scheduler.PRIORITY_LEVELS["MEDIUM"])
+            create_test_job(priority=scheduler.PRIORITY_LEVELS["MEDIUM_HIGH"])
         ]
+        
+        # Initialize default tenant quota
+        scheduler.tenant_manager.set_quota("default", gpu_limit=10.0, cpu_limit=20.0)
         
         # Submit jobs
         for job in jobs:
@@ -57,7 +60,7 @@ class TestGlobalMLScheduler:
         assert len(scheduled_jobs) == 3
         assert scheduled_jobs[0].priority == scheduler.PRIORITY_LEVELS["CRITICAL"]
         assert scheduled_jobs[1].priority == scheduler.PRIORITY_LEVELS["HIGH"]
-        assert scheduled_jobs[2].priority == scheduler.PRIORITY_LEVELS["MEDIUM"]
+        assert scheduled_jobs[2].priority == scheduler.PRIORITY_LEVELS["MEDIUM_HIGH"]
         
     async def test_credit_calculation(self, scheduler):
         """Test credit calculation based on wait time and fair share."""
