@@ -2,7 +2,7 @@ from typing import Optional, Dict, List
 from datetime import datetime, timedelta, timezone
 import asyncio
 from sqlalchemy import select, update
-from app.models.job import Job, JobStatus
+from app.models.job import Job, JobStatus, JobCreate
 from app.models.database import get_session, JobModel
 from app.core.scheduler import GlobalMLScheduler
 from app.core.queue_manager import QueueManager
@@ -106,17 +106,19 @@ class HAGlobalScheduler:
             for job in jobs:
                 if job.status == JobStatus.PENDING:
                     # Re-queue pending jobs
-                    self.queue_manager.queue.enqueue(Job(
-                        id=job.id,
+                    job_create = JobCreate(
                         name=job.name,
                         priority=job.priority,
-                        status=JobStatus(job.status.value),
-                        submitted_at=job.submitted_at,
-                        last_status_change=job.last_status_change,
-                        metadata=job.metadata,
-                        preemption_count=job.preemption_count,
-                        wait_time_weight=job.wait_time_weight
-                    ))
+                        metadata=dict(job.metadata)
+                    )
+                    new_job = Job.create(job_create)
+                    # Update fields that should be preserved
+                    object.__setattr__(new_job, 'id', job.id)
+                    object.__setattr__(new_job, 'submitted_at', job.submitted_at)
+                    object.__setattr__(new_job, 'last_status_change', job.last_status_change)
+                    object.__setattr__(new_job, 'preemption_count', job.preemption_count)
+                    object.__setattr__(new_job, 'wait_time_weight', job.wait_time_weight)
+                    self.queue_manager.queue.enqueue(new_job)
                     
     async def submit_job(self, job: Job) -> None:
         """Submit a job to the scheduler."""
