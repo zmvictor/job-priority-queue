@@ -84,7 +84,8 @@ class HAGlobalScheduler:
                         leader_id=self.node_id,
                         last_heartbeat=now,
                         status=JobStatusEnum.SUBMITTED,
-                        last_status_change=now
+                        last_status_change=now,
+                        job_metadata="{}"  # Ensure metadata is set
                     )
                     .returning(JobModel)
                 )
@@ -157,6 +158,8 @@ class HAGlobalScheduler:
                     
     async def submit_job(self, job: JobCreate) -> Job:
         """Submit a job to the scheduler."""
+        # Check leadership status
+        await self._try_acquire_leadership()  # Try to acquire leadership first
         if not self.is_leader:
             raise ValueError("Not the leader node")
             
