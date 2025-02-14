@@ -82,7 +82,8 @@ class HAGlobalScheduler:
                     )
                     .values(
                         leader_id=self.node_id,
-                        last_heartbeat=now
+                        last_heartbeat=now,
+                        status=JobStatusEnum.SUBMITTED  # Ensure status is valid
                     )
                     .returning(JobModel)
                 )
@@ -106,27 +107,30 @@ class HAGlobalScheduler:
                             leader = JobModel(
                                 id="leader",
                                 name="leader",
-                                status="pending",
+                                status=JobStatusEnum.SUBMITTED,  # Use enum value
                                 priority=0,
                                 job_metadata="{}",
                                 submitted_at=now,
                                 last_status_change=now,
                                 leader_id=self.node_id,
-                                last_heartbeat=now
+                                last_heartbeat=now,
+                                preemption_count=0,
+                                wait_time_weight=1.0
                             )
                             session.add(leader)
                             await session.commit()
                             self.is_leader = True
                             return True
-                    except Exception:
-                        # Record might already exist
-                        pass
+                    except Exception as e:
+                        print(f"Error creating leader record: {str(e)}")
+                        await session.rollback()
                 
                 self.is_leader = False
                 return False
                 
             except Exception as e:
                 print(f"Error in leadership check: {str(e)}")
+                await session.rollback()
                 self.is_leader = False
                 return False
                 

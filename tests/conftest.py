@@ -28,40 +28,25 @@ async def setup_database():
     # Create leader record
     async with get_session() as session:
         try:
+            now = datetime.now(timezone.utc)
             leader = JobModel(
                 id="leader",
                 name="leader",
-                status="pending",
+                status=JobStatusEnum.SUBMITTED,  # Use enum value
                 priority=0,
                 job_metadata="{}",
-                submitted_at=datetime.now(timezone.utc),
-                last_status_change=datetime.now(timezone.utc),
+                submitted_at=now,
+                last_status_change=now,
                 leader_id=None,
-                last_heartbeat=None
+                last_heartbeat=None,
+                preemption_count=0,
+                wait_time_weight=1.0
             )
             session.add(leader)
             await session.commit()
-        except Exception:
+        except Exception as e:
+            print(f"Error creating leader record: {str(e)}")
             await session.rollback()
-            
-        # Create tables if they don't exist
-        from sqlalchemy import text
-        await session.execute(text("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id VARCHAR NOT NULL PRIMARY KEY,
-                name VARCHAR NOT NULL,
-                priority INTEGER NOT NULL,
-                submitted_at DATETIME NOT NULL,
-                status VARCHAR(9) NOT NULL,
-                job_metadata VARCHAR NOT NULL,
-                last_status_change DATETIME NOT NULL,
-                preemption_count INTEGER,
-                wait_time_weight FLOAT,
-                leader_id VARCHAR,
-                last_heartbeat DATETIME
-            )
-        """))
-        await session.commit()
     
     yield
     
@@ -69,9 +54,10 @@ async def setup_database():
     async with get_session() as session:
         try:
             for table in reversed(Base.metadata.sorted_tables):
-                await session.execute(table.delete())
+                await session.execute(text("DELETE FROM " + table.name))
             await session.commit()
-        except Exception:
+        except Exception as e:
+            print(f"Error cleaning up database: {str(e)}")
             await session.rollback()
 
 @pytest.fixture
