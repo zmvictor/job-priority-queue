@@ -1,8 +1,9 @@
 import pytest
 import asyncio
 import os
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.models.database import Base, get_session, init_db
+from app.models.database import Base, get_session, init_db, JobModel
 
 @pytest.fixture(scope="session")
 def event_loop():
