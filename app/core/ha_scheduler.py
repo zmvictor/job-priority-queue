@@ -97,29 +97,37 @@ class HAGlobalScheduler:
                 # If no leader record exists, create one
                 if not updated:
                     try:
-                        leader = JobModel(
-                            id="leader",
-                            name="leader",
-                            status="pending",
-                            priority=0,
-                            job_metadata="{}",
-                            submitted_at=now,
-                            last_status_change=now,
-                            leader_id=self.node_id,
-                            last_heartbeat=now
-                        )
-                        session.add(leader)
-                        await session.commit()
-                        self.is_leader = True
-                        return True
+                        # First check if leader record exists
+                        stmt = select(JobModel).where(JobModel.id == "leader")
+                        result = await session.execute(stmt)
+                        existing = result.scalar_one_or_none()
+                        
+                        if not existing:
+                            leader = JobModel(
+                                id="leader",
+                                name="leader",
+                                status="pending",
+                                priority=0,
+                                job_metadata="{}",
+                                submitted_at=now,
+                                last_status_change=now,
+                                leader_id=self.node_id,
+                                last_heartbeat=now
+                            )
+                            session.add(leader)
+                            await session.commit()
+                            self.is_leader = True
+                            return True
                     except Exception:
                         # Record might already exist
                         pass
                 
+                self.is_leader = False
                 return False
                 
             except Exception as e:
                 print(f"Error in leadership check: {str(e)}")
+                self.is_leader = False
                 return False
                 
     async def _sync_state(self) -> None:

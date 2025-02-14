@@ -43,14 +43,35 @@ async def setup_database():
             await session.commit()
         except Exception:
             await session.rollback()
+            
+        # Create tables if they don't exist
+        await session.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id VARCHAR NOT NULL PRIMARY KEY,
+                name VARCHAR NOT NULL,
+                priority INTEGER NOT NULL,
+                submitted_at DATETIME NOT NULL,
+                status VARCHAR(9) NOT NULL,
+                job_metadata VARCHAR NOT NULL,
+                last_status_change DATETIME NOT NULL,
+                preemption_count INTEGER,
+                wait_time_weight FLOAT,
+                leader_id VARCHAR,
+                last_heartbeat DATETIME
+            )
+        """)
+        await session.commit()
     
     yield
     
     # Cleanup after test
     async with get_session() as session:
-        for table in reversed(Base.metadata.sorted_tables):
-            await session.execute(table.delete())
-        await session.commit()
+        try:
+            for table in reversed(Base.metadata.sorted_tables):
+                await session.execute(table.delete())
+            await session.commit()
+        except Exception:
+            await session.rollback()
 
 @pytest.fixture
 async def test_session():
