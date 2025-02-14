@@ -35,6 +35,11 @@ async def setup_and_cleanup():
     await queue_manager.stop()
 
 class TestJobLifecycle:
+    @pytest.fixture
+    async def client(self, test_client):
+        """Get a test client."""
+        return test_client
+        
     async def test_full_job_lifecycle(self, client):
         """Test the complete lifecycle of a job through the API."""
         # Submit job
