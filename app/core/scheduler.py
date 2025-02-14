@@ -1,10 +1,8 @@
-from typing import Optional, List, Dict, TypeAlias
+from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 from app.models.job import Job, JobStatus
 from app.core.queue_manager import QueueManager
-
-# Type alias for resource usage tracking
-ResourceUsage: TypeAlias = Dict[str, float]
+from app.core.tenant import TenantManager, ResourceUsage, UsageRecord
 
 class GlobalMLScheduler:
     """Global ML Scheduler (GMS) implementation based on the paper.
@@ -35,9 +33,8 @@ class GlobalMLScheduler:
     def __init__(self, queue_manager: QueueManager):
         self.queue_manager = queue_manager
         self.state_manager = queue_manager.state_manager
+        self.tenant_manager = TenantManager()
         self._tenant_resources: Dict[str, ResourceUsage] = {}
-        self._usage_history: Dict[str, List[ResourceUsage]] = {}
-        self._history_window = 24  # Hours of history to maintain
     
     def calculate_credit(self, workload: Job) -> float:
         """Calculate workload credit based on wait time and tenant resource usage."""
@@ -147,21 +144,22 @@ class GlobalMLScheduler:
     
     def _get_window_avg_usage(self, tenant: str) -> float:
         """Get average resource usage for a tenant over the history window."""
-        history = self._usage_history.get(tenant, [])
+        history = self.tenant_manager.get_usage_history(tenant)
         if not history:
             return 0.0
         return sum(usage["total"] for usage in history) / len(history)
     
     def _get_window_avg_usage_all_tenants(self) -> float:
         """Get average resource usage across all tenants."""
-        all_usage = [
-            usage
-            for tenant in self._usage_history.values()
-            for usage in tenant
-        ]
-        if not all_usage:
+        total_usage = 0.0
+        total_records = 0
+        for tenant in self._tenant_resources:
+            history = self.tenant_manager.get_usage_history(tenant)
+            total_usage += sum(usage["total"] for usage in history)
+            total_records += len(history)
+        if total_records == 0:
             return 1.0  # Avoid division by zero
-        return sum(usage["total"] for usage in all_usage) / len(all_usage)
+        return total_usage / total_records
     
     async def _calculate_tenant_resources(self) -> Dict[str, ResourceUsage]:
         """Calculate current resource usage per tenant."""
@@ -201,5 +199,9 @@ class GlobalMLScheduler:
     
     def _get_tenant_quota(self, tenant: str, resource: str) -> float:
         """Get quota limit for a tenant and resource type."""
-        # TODO: Implement quota management in next step
-        return float("inf")  # No quota limits for now
+        quota = self.tenant_manager.get_quota(tenant)
+        if resource == "gpu":
+            return quota.gpu_limit
+        elif resource == "cpu":
+            return quota.cpu_limit
+        return float("inf")
