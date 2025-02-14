@@ -92,7 +92,6 @@ class HAGlobalScheduler:
                 
                 if updated:
                     await session.commit()
-                    self.is_leader = True
                     return True
                 
                 # If no leader record exists, create one
@@ -139,7 +138,7 @@ class HAGlobalScheduler:
             # Update local state
             self.queue_manager.queue.clear()
             for job in jobs:
-                if job.status == JobStatusEnum.SUBMITTED:
+                if job.id != "leader" and job.status == JobStatusEnum.SUBMITTED:
                     # Re-queue pending jobs
                     job_create = JobCreate(
                         name=job.name,
