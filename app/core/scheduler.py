@@ -117,7 +117,10 @@ class GlobalMLScheduler:
                 priority=job.priority,
                 metadata=metadata
             )
-            job = Job.create(job_create)
+            new_job = Job.create(job_create)
+            # Preserve original job ID
+            object.__setattr__(new_job, 'id', job.id)
+            job = new_job
             
             # Try to transition job to running
             try:

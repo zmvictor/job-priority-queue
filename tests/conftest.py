@@ -11,10 +11,12 @@ from app.core.queue_manager import QueueManager
 from app.core.ha_scheduler import HAGlobalScheduler
 
 @pytest.fixture(scope="function")
-def event_loop():
+async def event_loop():
     """Create an instance of the default event loop for each test case."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
+    await loop.shutdown_asyncgens()
     loop.close()
 
 @pytest.fixture(autouse=True)

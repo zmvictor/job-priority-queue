@@ -91,6 +91,7 @@ class HAGlobalScheduler:
                 
                 if updated:
                     await session.commit()
+                    self.is_leader = True
                     return True
                 
                 # If no leader record exists, create one
@@ -114,8 +115,10 @@ class HAGlobalScheduler:
                     )
                     session.add(leader)
                     await session.commit()
+                    self.is_leader = True
                     return True
                 
+                self.is_leader = False
                 return False
                 
             except Exception as e:
