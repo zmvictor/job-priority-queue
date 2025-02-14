@@ -58,9 +58,9 @@ class HAGlobalScheduler:
                     await self._scheduler.update_priorities()
                     await self._scheduler.schedule()
                 else:
-                    self.is_leader = False
                     if was_leader:
                         # Lost leadership, sync state
+                        self.is_leader = False
                         await self._sync_state()
                     else:
                         # Not leader, sync state periodically
@@ -70,7 +70,12 @@ class HAGlobalScheduler:
                 print(f"Error in heartbeat: {str(e)}")
                 self.is_leader = False
                 
+            # Wait before next heartbeat
             await asyncio.sleep(self.HEARTBEAT_INTERVAL)
+            
+            # Sync state periodically even if not leader
+            if not self.is_leader:
+                await self._sync_state()
             
     async def _try_acquire_leadership(self) -> bool:
         """Try to acquire or maintain leadership."""
@@ -209,18 +214,23 @@ class HAGlobalScheduler:
                     
     async def submit_job(self, job: JobCreate) -> Job:
         """Submit a job to the scheduler."""
-        # Check leadership status
-        if not self.is_leader and not await self._try_acquire_leadership():
+        # Try to acquire leadership if not leader
+        if not self.is_leader:
+            self.is_leader = await self._try_acquire_leadership()
+            
+        if not self.is_leader:
             raise ValueError("Not the leader node")
             
         # Create Job instance from JobCreate
         new_job = Job.create(job)
         
-        # Add default cluster if not specified
-        if "cluster" not in new_job.metadata:
-            metadata = dict(new_job.metadata)
+        # Add required metadata
+        metadata = dict(new_job.metadata)
+        if "cluster" not in metadata:
             metadata["cluster"] = "default"
-            object.__setattr__(new_job, 'metadata', metadata)
+        if "tenant_id" not in metadata:
+            metadata["tenant_id"] = "default"
+        object.__setattr__(new_job, 'metadata', metadata)
             
         # Save job to database first
         async with get_session() as session:
