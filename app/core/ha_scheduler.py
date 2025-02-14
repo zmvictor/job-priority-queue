@@ -50,17 +50,17 @@ class HAGlobalScheduler:
                 acquired = await self._try_acquire_leadership()
                 
                 if acquired:
+                    self.is_leader = True
                     if not was_leader:
                         # Just became leader, sync state
                         await self._sync_state()
-                    self.is_leader = True
                     # Leader duties: schedule jobs and update state
                     await self._scheduler.update_priorities()
                     await self._scheduler.schedule()
                 else:
+                    self.is_leader = False
                     if was_leader:
                         # Lost leadership, sync state
-                        self.is_leader = False
                         await self._sync_state()
                     else:
                         # Not leader, sync state periodically
