@@ -11,8 +11,8 @@ class HAGlobalScheduler:
     """High-availability Global ML Scheduler with leader-follower mode."""
     
     # Constants for HA operation
-    LEASE_DURATION = 30  # seconds
-    HEARTBEAT_INTERVAL = 15  # seconds
+    LEASE_DURATION = 5  # seconds (shorter for testing)
+    HEARTBEAT_INTERVAL = 2  # seconds (shorter for testing)
     
     def __init__(self, node_id: str, queue_manager: QueueManager):
         self.node_id = node_id

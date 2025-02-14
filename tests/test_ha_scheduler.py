@@ -15,7 +15,21 @@ async def queue_manager():
     await manager.stop()
     
 @pytest.fixture
-async def ha_scheduler(queue_manager):
+async def ha_scheduler(queue_manager, test_session):
+    # Create leader record
+    from app.models.database import JobModel
+    leader = JobModel(
+        id="leader",
+        name="leader",
+        status="pending",
+        priority=0,
+        metadata={},
+        leader_id=None,
+        last_heartbeat=None
+    )
+    test_session.add(leader)
+    await test_session.commit()
+    
     scheduler = HAGlobalScheduler("test-node-1", queue_manager)
     await scheduler.start()
     yield scheduler
