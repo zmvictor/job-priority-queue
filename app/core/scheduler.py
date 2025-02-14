@@ -177,15 +177,16 @@ class GlobalMLScheduler:
         total_records = 0
         for tenant in self._tenant_resources:
             history = self.tenant_manager.get_usage_history(tenant)
-            total_usage += sum(usage["total"] for usage in history)
-            total_records += len(history)
+            if history:
+                total_usage += sum(usage["total"] for usage in history)
+                total_records += len(history)
         if total_records == 0:
-            return 1.0  # Avoid division by zero
+            return 0.0  # No usage yet
         return total_usage / total_records
     
     async def _calculate_tenant_resources(self) -> Dict[str, ResourceUsage]:
         """Calculate current resource usage per tenant."""
-        resources = {}
+        resources = {"default": {"gpu": 0.0, "cpu": 0.0, "total": 0.0}}
         running_jobs = await self.state_manager.get_running_jobs()
         for job in running_jobs:
             tenant = self._get_tenant(job)

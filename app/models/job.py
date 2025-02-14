@@ -68,7 +68,9 @@ class Job(BaseModel):
     @model_validator(mode='after')
     def make_metadata_immutable(self) -> 'Job':
         """Make metadata immutable after model creation."""
-        object.__setattr__(self, 'metadata', MappingProxyType(self.metadata))
+        if isinstance(self.metadata, MappingProxyType):
+            return self
+        object.__setattr__(self, 'metadata', MappingProxyType(dict(self.metadata)))
         return self
 
     def get_metadata(self) -> Dict[str, Any]:

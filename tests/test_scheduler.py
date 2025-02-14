@@ -137,21 +137,19 @@ class TestGlobalMLScheduler:
         
     async def test_fair_share(self, scheduler):
         """Test fair share scheduling between tenants."""
+        # Initialize tenants with quotas
+        scheduler.tenant_manager.set_quota("tenant1", gpu_limit=4.0, cpu_limit=8.0)
+        scheduler.tenant_manager.set_quota("tenant2", gpu_limit=4.0, cpu_limit=8.0)
+        
         # Create jobs for different tenants
         tenant1_jobs = [
-            create_test_job(priority=50, gpu_count=1),
-            create_test_job(priority=50, gpu_count=1)
+            create_test_job(priority=50, gpu_count=1, tenant_id="tenant1"),
+            create_test_job(priority=50, gpu_count=1, tenant_id="tenant1")
         ]
         tenant2_jobs = [
-            create_test_job(priority=50, gpu_count=1),
-            create_test_job(priority=50, gpu_count=1)
+            create_test_job(priority=50, gpu_count=1, tenant_id="tenant2"),
+            create_test_job(priority=50, gpu_count=1, tenant_id="tenant2")
         ]
-        
-        # Set tenant IDs
-        for job in tenant1_jobs:
-            job.metadata["tenant_id"] = "tenant1"
-        for job in tenant2_jobs:
-            job.metadata["tenant_id"] = "tenant2"
             
         # Submit all jobs
         for job in tenant1_jobs + tenant2_jobs:
