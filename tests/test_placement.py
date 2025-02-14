@@ -71,6 +71,24 @@ class TestPlacementOptimizer:
                 metadata=metadata
             )
             new_job = Job.create(job_create)
+            
+            # Create job in database first
+            async with get_session() as session:
+                db_job = JobModel(
+                    id=new_job.id,
+                    name=new_job.name,
+                    priority=new_job.priority,
+                    submitted_at=new_job.submitted_at,
+                    status=JobStatusEnum.SUBMITTED,
+                    job_metadata=json.dumps(new_job.metadata),
+                    last_status_change=new_job.last_status_change,
+                    preemption_count=new_job.preemption_count,
+                    wait_time_weight=new_job.wait_time_weight
+                )
+                session.add(db_job)
+                await session.commit()
+            
+            # Now transition to running
             await state_manager.transition_to_running(new_job)
             
         # Calculate cost for new job that requires preemption
@@ -124,6 +142,24 @@ class TestPlacementOptimizer:
                 metadata=metadata
             )
             new_job = Job.create(job_create)
+            
+            # Create job in database first
+            async with get_session() as session:
+                db_job = JobModel(
+                    id=new_job.id,
+                    name=new_job.name,
+                    priority=new_job.priority,
+                    submitted_at=new_job.submitted_at,
+                    status=JobStatusEnum.SUBMITTED,
+                    job_metadata=json.dumps(new_job.metadata),
+                    last_status_change=new_job.last_status_change,
+                    preemption_count=new_job.preemption_count,
+                    wait_time_weight=new_job.wait_time_weight
+                )
+                session.add(db_job)
+                await session.commit()
+            
+            # Now transition to running
             await state_manager.transition_to_running(new_job)
             
         # Try to place job that fits
