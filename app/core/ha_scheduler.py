@@ -103,23 +103,29 @@ class HAGlobalScheduler:
                 existing = result.scalar_one_or_none()
                 
                 if not existing:
-                    leader = JobModel(
-                        id="leader",
-                        name="leader",
-                        status=JobStatusEnum.SUBMITTED,
-                        priority=0,
-                        job_metadata="{}",
-                        submitted_at=now,
-                        last_status_change=now,
-                        leader_id=self.node_id,
-                        last_heartbeat=now,
-                        preemption_count=0,
-                        wait_time_weight=1.0
-                    )
-                    session.add(leader)
-                    await session.commit()
-                    self.is_leader = True
-                    return True
+                    try:
+                        leader = JobModel(
+                            id="leader",
+                            name="leader",
+                            status=JobStatusEnum.SUBMITTED,
+                            priority=0,
+                            job_metadata="{}",
+                            submitted_at=now,
+                            last_status_change=now,
+                            leader_id=self.node_id,
+                            last_heartbeat=now,
+                            preemption_count=0,
+                            wait_time_weight=1.0
+                        )
+                        session.add(leader)
+                        await session.commit()
+                        self.is_leader = True
+                        return True
+                    except Exception:
+                        await session.rollback()
+                        # Another node might have created the leader record
+                        # Try to acquire leadership again
+                        return await self._try_acquire_leadership()
                 
                 self.is_leader = False
                 return False

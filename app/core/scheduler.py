@@ -99,7 +99,12 @@ class GlobalMLScheduler:
         # Get available clusters from job metadata
         available_clusters = job.metadata.get("available_clusters", [])
         if not available_clusters:
-            available_clusters = ["default"]  # Fallback to default cluster
+            # If data location is specified, use that region
+            data_location = job.metadata.get("data_location", "")
+            if data_location:
+                available_clusters = [data_location]
+            else:
+                available_clusters = ["default"]  # Fallback to default cluster
             
         # Score each cluster
         for cluster in available_clusters:
@@ -182,10 +187,13 @@ class GlobalMLScheduler:
         # Handle nested metadata structure
         metadata = job.get_metadata()  # Get a copy to handle immutable metadata
         if isinstance(metadata, dict):
-            if "metadata" in metadata and isinstance(metadata["metadata"], dict):
-                return metadata["metadata"].get("tenant_id", "default")
+            # First check top-level metadata
             if "tenant_id" in metadata:
                 return metadata["tenant_id"]
+            # Then check nested metadata
+            if "metadata" in metadata and isinstance(metadata["metadata"], dict):
+                if "tenant_id" in metadata["metadata"]:
+                    return metadata["metadata"]["tenant_id"]
         return "default"
     
     def _get_window_avg_usage(self, tenant: str) -> float:
