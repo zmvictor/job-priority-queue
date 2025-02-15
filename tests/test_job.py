@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from app.models.job import Job, JobCreate, JobStatus
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def test_job_creation(job_create, job):
 def test_job_status_update(job):
     job.update_status(JobStatus.RUNNING)
     assert job.status == JobStatus.RUNNING
-    assert (datetime.now(UTC) - job.last_status_change).total_seconds() < 1
+    assert (datetime.now(timezone.utc) - job.last_status_change).total_seconds() < 1
 
 def test_job_preemption(job):
     initial_count = job.preemption_count
@@ -35,7 +35,7 @@ def test_job_preemption(job):
 
 def test_wait_time_calculation(job):
     # Set submitted_at to 2 hours ago
-    job.submitted_at = datetime.now(UTC) - timedelta(hours=2)
+    job.submitted_at = datetime.now(timezone.utc) - timedelta(hours=2)
     wait_time = job.calculate_wait_time()
     assert 1.9 <= wait_time <= 2.1  # Allow small time difference
 

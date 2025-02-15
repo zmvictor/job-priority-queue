@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any, Mapping
 from pydantic import BaseModel, Field, ConfigDict, model_validator, model_serializer
@@ -63,11 +63,14 @@ class Job(BaseModel):
     preemption_count: int = Field(default=0)
     wait_time_weight: float = Field(default=1.0)
     leader_id: Optional[str] = Field(default=None)
+    credit: float = Field(default=0.0)
 
     @model_validator(mode='after')
     def make_metadata_immutable(self) -> 'Job':
         """Make metadata immutable after model creation."""
-        object.__setattr__(self, 'metadata', MappingProxyType(self.metadata))
+        if isinstance(self.metadata, MappingProxyType):
+            return self
+        object.__setattr__(self, 'metadata', MappingProxyType(dict(self.metadata)))
         return self
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -89,8 +92,8 @@ class Job(BaseModel):
     def calculate_wait_time(self) -> float:
         """Calculate the total wait time in hours."""
         # Ensure both datetimes are timezone-aware and in UTC
-        now = datetime.now(UTC)
-        submitted = self.submitted_at.astimezone(UTC)
+        now = datetime.now(timezone.utc)
+        submitted = self.submitted_at.astimezone(timezone.utc)
         wait_time = (now - submitted).total_seconds() / 3600.0
         # For test stability, use the actual submitted_at time
         if wait_time < 0:  # If submitted_at is in the future
@@ -106,11 +109,14 @@ class Job(BaseModel):
         boost = 1.0 + (wait_time / 24.0)  # Base + age in days
         object.__setattr__(self, 'wait_time_weight', boost)
         # Update submitted_at to ensure it's timezone-aware
-        object.__setattr__(self, 'submitted_at', self.submitted_at.astimezone(UTC))
+        object.__setattr__(self, 'submitted_at', self.submitted_at.astimezone(timezone.utc))
+        # Set initial credit to 0
+        if not hasattr(self, 'credit'):
+            object.__setattr__(self, 'credit', 0.0)
 
     @classmethod
     def create(cls, job_create: JobCreate) -> "Job":
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         return cls(
             id=str(uuid.uuid4()),
             name=job_create.name,
@@ -124,7 +130,7 @@ class Job(BaseModel):
     def update_status(self, new_status: JobStatus) -> None:
         """Update job status and last_status_change."""
         object.__setattr__(self, 'status', new_status)
-        object.__setattr__(self, 'last_status_change', datetime.now(UTC))
+        object.__setattr__(self, 'last_status_change', datetime.now(timezone.utc))
 
     def increment_preemption(self) -> None:
         """Increment preemption count and update status."""

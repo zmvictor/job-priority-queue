@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,8 +28,8 @@ class HAManager:
                 """),
                 {
                     "node_id": self.node_id,
-                    "now": datetime.now(UTC),
-                    "expired": datetime.now(UTC) - timedelta(seconds=self.lease_duration)
+                    "now": datetime.now(timezone.utc),
+                    "expired": datetime.now(timezone.utc) - timedelta(seconds=self.lease_duration)
                 }
             )
             await session.commit()
@@ -77,7 +77,7 @@ class HAManager:
             """),
             {
                 "node_id": self.node_id,
-                "expired": datetime.now(UTC) - timedelta(seconds=self.lease_duration)
+                "expired": datetime.now(timezone.utc) - timedelta(seconds=self.lease_duration)
             }
         )
         
@@ -85,6 +85,6 @@ class HAManager:
         for job in stale_jobs:
             job.status = "pending"
             job.leader_id = None
-            job.last_status_change = datetime.now(UTC)
+            job.last_status_change = datetime.now(timezone.utc)
         
         await session.commit()

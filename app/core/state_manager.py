@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import List, Optional, Dict
 from sqlalchemy import select, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,7 @@ class HAJobStateManager:
         if not self.ha_manager.is_leader:
             return None
             
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         
         async with get_session() as session:
             try:
@@ -95,7 +95,7 @@ class HAJobStateManager:
         if not self.ha_manager.is_leader:
             raise ValueError("Not the leader node")
             
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         logger.info(f"Attempting to preempt job {job.id} with current status {job.status}")
         
         async with get_session() as session:
@@ -128,7 +128,7 @@ class HAJobStateManager:
                         last_status_change=now,
                         leader_id=None,
                         preemption_count=JobModel.preemption_count + 1,
-                        wait_time_weight=1.0 + ((now - db_job.submitted_at.astimezone(UTC)).total_seconds() / 86400.0)
+                        wait_time_weight=1.0 + ((now - db_job.submitted_at.astimezone(timezone.utc)).total_seconds() / 86400.0)
                     )
                     .returning(JobModel)
                 )
