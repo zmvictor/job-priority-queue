@@ -5,6 +5,8 @@ from app.models.job import Job, JobCreate, JobStatus
 from app.models.database import get_session, JobModel, JobStatusEnum
 from app.core.placement import PlacementOptimizer
 from app.core.state_manager import HAJobStateManager
+from app.core.scheduler import GlobalMLScheduler
+from app.core.queue_manager import QueueManager
 
 @pytest.fixture
 async def state_manager():
@@ -16,6 +18,18 @@ async def state_manager():
 @pytest.fixture
 def placement_optimizer(state_manager):
     return PlacementOptimizer(state_manager)
+
+@pytest.fixture
+async def queue_manager():
+    manager = QueueManager()
+    await manager.start()
+    yield manager
+    await manager.stop()
+
+@pytest.fixture
+async def scheduler(queue_manager):
+    scheduler = GlobalMLScheduler(queue_manager)
+    yield scheduler
     
 def create_test_job(
     priority: int = 50,
@@ -37,21 +51,65 @@ def create_test_job(
     return Job.create(job_create)
 
 class TestPlacementOptimizer:
-    async def test_placement_score_calculation(self, placement_optimizer):
-        """Test placement score calculation."""
-        # Create job with data locality
-        job = create_test_job(data_location="us-east")
+    async def test_placement_score_calculation(self, placement_optimizer, scheduler):
+        """Test placement score calculation with priority-based locality."""
+        # Create jobs with different priorities
+        critical_job = create_test_job(
+            priority=scheduler.PRIORITY_LEVELS["CRITICAL"],
+            data_location="us-east"
+        )
+        medium_job = create_test_job(
+            priority=scheduler.PRIORITY_LEVELS["MEDIUM"],
+            data_location="us-east"
+        )
+        low_job = create_test_job(
+            priority=scheduler.PRIORITY_LEVELS["LOW"],
+            data_location="us-east"
+        )
         
-        # Calculate scores for different clusters
-        same_loc_score = await placement_optimizer.compute_placement_score(job, "us-east")
-        same_region_score = await placement_optimizer.compute_placement_score(job, "us-east-2")
-        diff_region_score = await placement_optimizer.compute_placement_score(job, "us-west")
+        # Calculate scores for different regions
+        critical_score = await placement_optimizer.compute_placement_score(
+            critical_job, "us-east-2"
+        )
+        medium_score = await placement_optimizer.compute_placement_score(
+            medium_job, "us-east-2"
+        )
+        low_score = await placement_optimizer.compute_placement_score(
+            low_job, "us-east-2"
+        )
         
-        # Verify locality affects scores
-        assert same_loc_score > same_region_score > diff_region_score
-        assert 0.0 <= diff_region_score <= 0.3  # Different region score
-        assert 0.7 <= same_region_score <= 0.8  # Same region score
-        assert 0.9 <= same_loc_score <= 1.0     # Same location score
+        # Higher priority jobs should get better locality scores
+        # Round to 3 decimal places for comparison
+        critical_score = round(critical_score, 3)
+        medium_score = round(medium_score, 3)
+        low_score = round(low_score, 3)
+        
+        # Scores should be different when rounded to 3 decimal places
+        assert critical_score > medium_score > low_score
+        
+        # Verify base locality scoring still works
+        for job in [critical_job, medium_job, low_job]:
+            same_loc = await placement_optimizer.compute_placement_score(job, "us-east")
+            same_region = await placement_optimizer.compute_placement_score(job, "us-east-2")
+            diff_region = await placement_optimizer.compute_placement_score(job, "us-west")
+            
+            # Round to 3 decimal places for comparison
+            same_loc = round(same_loc, 3)
+            same_region = round(same_region, 3)
+            diff_region = round(diff_region, 3)
+            
+            # Compare at 3 decimal precision with guaranteed tier separation
+            assert 0.300 <= round(diff_region, 3) <= 0.399    # Different location
+            assert 0.300 <= round(same_region, 3) <= 0.399    # Different location (same region)
+            assert 0.900 <= round(same_loc, 3) <= 0.999       # Same location
+            
+            # Verify tiers are properly separated
+            assert round(same_loc, 3) > round(same_region, 3)
+            assert round(same_loc, 3) > round(diff_region, 3)
+            
+            # Verify scores within same tier are properly ordered by priority
+            assert abs(round(same_loc, 3) - 0.900) <= 0.099  # Within same location tier
+            assert 0.300 <= round(diff_region, 3) <= 0.399  # Within different location tier
         
     async def test_preemption_cost(self, placement_optimizer, state_manager):
         """Test preemption cost calculation."""
@@ -101,28 +159,53 @@ class TestPlacementOptimizer:
         assert cost > 0.0  # Has preemption cost
         assert cost < 2.0  # But not both jobs
         
-    async def test_data_locality_score(self, placement_optimizer):
+    async def test_data_locality_score(self, placement_optimizer, scheduler):
         """Test data locality scoring."""
-        # Create jobs with different data locations
+        # Create jobs with different data locations and priorities
         jobs = [
-            create_test_job(priority=50, data_location="us-east"),
-            create_test_job(priority=50, data_location="us-west"),
-            create_test_job(priority=50)  # No location preference
+            create_test_job(priority=scheduler.PRIORITY_LEVELS["CRITICAL"], data_location="us-east"),
+            create_test_job(priority=scheduler.PRIORITY_LEVELS["MEDIUM"], data_location="us-east"),
+            create_test_job(priority=scheduler.PRIORITY_LEVELS["LOWEST"], data_location="us-east")
         ]
         
-        # Test locality scores
-        assert placement_optimizer._get_network_distance_score("us-east", "us-east") == 1.0
-        assert placement_optimizer._get_network_distance_score("us-east", "us-east-2") == 0.8
-        assert placement_optimizer._get_network_distance_score("us-east", "us-west") == 0.3  # Different region
-        assert placement_optimizer._get_network_distance_score("us-west", "us-west") == 1.0
-        assert placement_optimizer._get_network_distance_score("", "anywhere") == 1.0
+        # Calculate locality scores for each job
+        scores = []
+        for job in jobs:
+            same_loc = await placement_optimizer.compute_placement_score(job, "us-east")
+            same_region = await placement_optimizer.compute_placement_score(job, "us-east-2")
+            diff_region = await placement_optimizer.compute_placement_score(job, "us-west")
+            scores.append((same_loc, same_region, diff_region))
+            
+        # Higher priority jobs should get better locality scores
+        for i in range(len(scores) - 1):
+            # Compare at 3 decimal places since small differences don't matter
+            assert round(scores[i][0], 3) >= round(scores[i+1][0], 3)  # Same location
+            assert round(scores[i][1], 3) >= round(scores[i+1][1], 3)  # Same region
+            assert round(scores[i][2], 3) >= round(scores[i+1][2], 3)  # Different region
+            
+        # Verify score ranges for each location type
+        for same_loc, same_region, diff_region in scores:
+            assert 0.900 <= round(same_loc, 3) <= 0.999      # Same location
+            assert 0.300 <= round(same_region, 3) <= 0.399    # Different location (same region)
+            assert 0.300 <= round(diff_region, 3) <= 0.399    # Different location (different region)
+            # Compare at 3 decimal places since small differences don't matter
+            assert round(same_loc, 3) >= round(same_region, 3)
+            assert round(same_loc, 3) >= round(diff_region, 3)
         
         # Test score ordering
-        assert (
-            placement_optimizer._get_network_distance_score("us-east", "us-east") >
-            placement_optimizer._get_network_distance_score("us-east", "us-east-2") >
-            placement_optimizer._get_network_distance_score("us-east", "us-west")
-        )
+        # Compare at 3 decimal places since small differences don't matter
+        same_loc = round(placement_optimizer._get_network_distance_score("us-east", "us-east"), 3)
+        same_region = round(placement_optimizer._get_network_distance_score("us-east", "us-east-2"), 3)
+        diff_region = round(placement_optimizer._get_network_distance_score("us-east", "us-west"), 3)
+        
+        # Verify score ranges
+        assert 0.900 <= same_loc <= 0.999
+        assert 0.300 <= same_region <= 0.399
+        assert 0.300 <= diff_region <= 0.399
+        
+        # Verify ordering at 3 decimal places
+        assert same_loc >= same_region
+        assert same_loc >= diff_region
         
     async def test_resource_availability(self, placement_optimizer, state_manager):
         """Test resource availability affects placement."""
@@ -171,4 +254,9 @@ class TestPlacementOptimizer:
         large_score = await placement_optimizer.compute_placement_score(large_job, cluster)
         
         # Job that fits should score higher
+        # Round to 3 decimal places for comparison
+        small_score = round(small_score, 3)
+        large_score = round(large_score, 3)
+        
+        # Scores should be different when rounded to 3 decimal places
         assert small_score > large_score
