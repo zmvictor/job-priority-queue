@@ -38,6 +38,20 @@ Each job includes:
   - Lower priority job is running
   - Preempted jobs return to queue with wait time boost
 
+### Global ML Scheduler (GMS)
+- Two-tier placement scoring system:
+  - Same location: 0.900-0.999
+  - Different location: 0.300-0.399
+  - Scores equal at 3 decimal places are treated as equivalent
+- Priority-based placement optimization
+  - Higher priority jobs get better locality scores
+  - Resource availability affects placement decisions
+  - Data locality awareness for optimal placement
+- Preemption cost calculation
+  - Based on number of jobs to preempt
+  - Considers priority and runtime of preempted jobs
+  - Ensures minimal disruption to running workloads
+
 ## Development Setup
 ```bash
 # Install dependencies
